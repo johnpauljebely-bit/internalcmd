@@ -1,0 +1,24 @@
+[Unit]
+Description=Delta City Dispatch bot + webhook receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dispatch
+WorkingDirectory=/opt/delta-city-dispatch
+EnvironmentFile=/opt/delta-city-dispatch/.env
+ExecStart=/usr/bin/npx tsx src/index.ts
+Restart=on-failure
+RestartSec=5
+# Caps restart attempts at 5 within a 60s window — without this, a persistently broken config
+# (bad DATABASE_URL, expired Discord token, etc.) would have systemd restart every 5s forever,
+# hammering Postgres/Discord/ER:LC and flooding the journal. After the burst, systemd marks the
+# unit failed instead — `systemctl status` shows why, rather than an endless silent restart loop.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

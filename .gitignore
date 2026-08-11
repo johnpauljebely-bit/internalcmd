@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+logs/*.log
+dispatch.db
+.DS_Store
+voice/.venv/
+voice/models/
+voice/test-audio/*.wav
+voice/test-audio/*.aiff
