@@ -13,12 +13,14 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   this dev machine's current IP: `173.180.215.120`.** Will need doing again for whatever IP the
   eventual Oracle VM uses. `erlcClient.ts` now specifically detects and logs this 403 case
   clearly instead of a bare "failed: 403", so it should self-diagnose if it happens again.
-- **Oracle Cloud Always Free VM.** Can't sign up (needs a real card + personal info). The bot
-  currently runs locally via `npx tsx src/index.ts` + a Cloudflare quick tunnel. Wrote
-  `deploy/README.md` + a systemd unit ahead of time so deployment is copy-paste once the VM
-  exists — untested against a real VM since none exists yet, flag anything that doesn't match.
-  **2026-08-10 update**: the stack now needs Postgres too (see below) — `deploy/README.md` hasn't
-  been updated yet to cover installing/provisioning it on the eventual VM, only Vosk/Piper/Node.
+- **No VM exists yet — this is the actual remaining blocker to real hosting.** Still can't sign up
+  for Oracle Cloud (or any host) on the user's behalf — needs a real card + personal info. The bot
+  currently runs locally on the dev machine via `npx tsx src/index.ts` + a Cloudflare tunnel, not
+  on any real server. `deploy/README.md` + the systemd unit are complete and now also cover
+  Postgres provisioning (2026-08-13, was previously missing) — genuinely copy-paste-ready once a
+  VM exists, but untested against a real VM since none has ever existed. **Next action is on the
+  user**: provision any Linux host (Oracle Free Tier, or any other VPS) and follow
+  `deploy/README.md` end to end.
 - **This dev machine (M1, 8GB RAM) is under real memory pressure just running the existing stack.**
   Confirmed via `sysctl vm.swapusage`: **10.6GB of 12GB swap in use** immediately after a fresh
   restart with only Node + the Vosk STT server + the Piper TTS server running — nothing else. This
