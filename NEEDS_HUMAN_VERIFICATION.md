@@ -112,17 +112,20 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   `1535866581853413383`)** — never confirmed this is the correct/current role ID for what the
   user meant by "exempt from CAD and the pms and loads." Confirm a real holder of this role is
   correctly skipped in the dry-run logs.
-- **`STAFF_WAITING_ROOM_VC_ID` is unset — needs a real Discord VC channel ID.** `;mod` currently
-  no-ops with a warning (and tells the caller to ping staff directly) until this is set in `.env`.
-  Get the real channel ID (right-click → Copy Channel ID with Developer Mode on) and set it.
-- **`MOD_CONFIRM_ROLE_IDS` (`src/config.ts`) currently reuses `DISPATCH_ADMIN_ROLE_IDS`** as a
-  placeholder for "who can run `/mod arrived`" — there's no dedicated moderator role anywhere in
-  this codebase. Confirm whether that's actually the right group, or provide the real
-  staff/moderator role ID(s) to use instead.
-- **Mod-call flow (`;mod` / `/mod arrived`) — never tested live.** Confirm the full loop: `;mod`
-  drags the caller + PMs them + logs to server-management; `/mod arrived player:<user>` (once a
-  staff role is confirmed above) correctly finds them in the `waitingForMod` map and drags both
-  into an empty `STAFF_SCENE_VC_IDS` channel together.
+- **Mod-call flow (`;mod` + auto-detection) — never tested live end-to-end.** User confirmed the
+  real waiting-room channel ID (`STAFF_WAITING_ROOM_VC_ID`, now hardcoded in `config.ts`) and the
+  detection mechanism: no manual confirm command at all — `modCallDetector.ts` polls
+  `GET /server?CommandLogs=true` every 10s and watches for a staff member's own `:tp` command
+  targeting the waiting player's username, then drags both into a free `STAFF_SCENE_VC_IDS`
+  channel. The endpoint/response shape is now confirmed live (`{Player, Command, Timestamp}`,
+  same query-flag pattern as Players/EmergencyCalls — an earlier guess at a separate
+  `/server/commandlogs` path 404'd and was fixed). **What's still unconfirmed**: the exact `:tp`
+  command syntax/argument order (only a `:time 10` sample has been observed, no real teleport
+  yet) — `commandTargetsPlayer()` in `modCallDetector.ts` parses defensively (any command
+  containing the standalone word "tp", checking every other token against the waiting username)
+  rather than assuming a fixed position, but this needs a real staff `:tp` to confirm it actually
+  matches. Also confirm the full loop end to end: `;mod` drags the caller + PMs them + logs to
+  server-management, then a real staff `:tp` to that player resolves it within ~10s.
 
 ## Needs live gameplay to confirm (can't synthesize)
 

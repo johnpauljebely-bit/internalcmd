@@ -2,6 +2,69 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-13 (mod call, rewritten) — Real waiting-room channel + auto-detection via command log, `/mod arrived` removed
+
+User provided the two pieces of missing info from the earlier mod-call build: the real
+`STAFF_WAITING_ROOM_VC_ID` (`1535866586924326962`, now hardcoded in `config.ts` like every other
+confirmed channel ID), and — more significantly — a real detection mechanism they'd seen work
+elsewhere: watch the ER:LC server logs for a staff member's own teleport-to-player command, not a
+manual confirm command. Explicit instruction: **"no mod arrived command its auto using what i just
+explained."**
+
+Rebuilt accordingly:
+- **Removed** `/mod arrived` entirely (`commands/mod.ts` deleted, deregistered from
+  `discordBot.ts`, `MOD_CONFIRM_ROLE_IDS` removed from `config.ts` — no longer needed now that
+  there's no command to gate).
+- **Added** `src/modCallDetector.ts` — polls `getCommandLogs()` every 10s, watching for a `:tp`
+  command whose arguments include a currently-waiting player's username. On match: drags both the
+  caller and the teleporting staff member (resolved via their Discord link) into a free
+  `STAFF_SCENE_VC_IDS` channel, PMs the caller, logs to server-management. Uses the same
+  "baseline on first poll, only react to entries seen after that" pattern `callDispatch.ts`
+  already established for calls — otherwise every historical command since server start would
+  fire on the very first poll.
+- **`erlcClient.ts`'s `getCommandLogs()` — built against a wrong guess, then fixed against the
+  real API.** First guess was a separate `GET /server/commandlogs` path (matching how ER:LC's
+  *other* log types are commonly documented) — 404'd live. Tested the same query-flag pattern
+  already confirmed working for `Players`/`EmergencyCalls` (`GET /server?CommandLogs=true`) — 200,
+  and the response shape (`{Player, Command, Timestamp}`) matched the field-name guess exactly,
+  just nested under the wrong request shape. Fixed and confirmed against the real live API before
+  restarting.
+
+tsc clean, 119/119 tests passing, bot restarted, confirmed via logs: no more 404s, detector poller
+running clean. `:tp` command syntax itself still unconfirmed (only a `:time 10` sample observed so
+far, no real teleport yet) — flagged in NEEDS_HUMAN_VERIFICATION.md as the one remaining
+live-test item for this feature.
+
+## 2026-08-13 (deploy prep) — First git commit ever for this repo, plus closing real deploy-doc gaps
+
+User asked to get everything ready to host. Found a real blocker doing that: **this repo had never
+been committed to git at all** (`git log` came back "does not have any commits yet") — the
+existing `deploy/README.md`'s `git clone <your-repo-url>` step assumed a pushed repo that didn't
+exist. Checked for secrets before staging (grepped for hardcoded keys/tokens — none found,
+everything goes through `process.env.*`; confirmed `.env` itself is gitignored and wasn't staged)
+and made the first commit — 71 files, everything except `node_modules`/`dist`/`.env`/logs/voice
+models. **No remote configured and none pushed** — that needs a real decision (GitHub? self-hosted
+git?) this session isn't making unprompted.
+
+Also closed two real gaps in the deploy docs while in there:
+- `deploy/README.md` never covered Postgres at all (flagged as a known gap since the CAD
+  integration landed) — added a step installing/enabling it and creating the `delta_city_app`
+  role + `delta_city` database, matching local dev's trust-auth setup. Flagged the real open
+  question explicitly rather than guessing: is this VM's own Postgres the one both the bot and
+  the CAD website end up pointing at, or does the CAD move somewhere else entirely — pick one
+  before this matters, don't end up with two silently-diverging databases.
+- `deploy/delta-city-dispatch.service` had no crash-loop protection — `Restart=on-failure` +
+  `RestartSec=5` alone would restart forever every 5s against a persistently broken config
+  (bad `DATABASE_URL`, expired token), hammering Postgres/Discord/ER:LC and flooding the journal.
+  Added `StartLimitIntervalSec=60` / `StartLimitBurst=5` so systemd gives up and marks the unit
+  failed after 5 attempts in a minute instead.
+
+README.md was also stale in a few places that would mislead anyone deploying from it: still said
+"SQLite schema" (migrated to Postgres 2026-08-10), test count said 62 (actually 119), and
+referenced a `pythonBridge.ts` file that doesn't exist (`ttsServer.ts`). Fixed, and added the
+newer pollers (`joinReminder.ts`, `roleplayHints.ts`, `modCallDetector.ts`) and `internalApi.ts`
+to the project-structure list.
+
 ## 2026-08-11 (hardening) — `/internal/announce`'s secret check wasn't timing-safe
 
 `internalApi.ts` compared `X-Internal-Secret` against `INTERNAL_API_SECRET` with plain `!==` — leaks

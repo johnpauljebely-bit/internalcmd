@@ -1,7 +1,9 @@
 # Delta City Dispatch
 
-Discord bot + webhook service for the Delta City Roleplay ER:LC server — text commands, callsign
-management, and (in progress) a voice dispatcher. See **[BRIEF.md](BRIEF.md)** for the full
+Discord bot + webhook service for the Delta City Roleplay ER:LC server — in-game text commands,
+callsign management, a voice radio dispatcher (STT/TTS), compliance monitoring, and a mod-call
+flow, backed by a Postgres database shared with the companion `delta-city-cad` website. See
+**[BRIEF.md](BRIEF.md)** for the full
 project spec, **[CHANGELOG.md](CHANGELOG.md)** for what's been built and why, and
 **[NEEDS_HUMAN_VERIFICATION.md](NEEDS_HUMAN_VERIFICATION.md)** for what's blocked on live
 testing or account access only a human can provide.
@@ -11,7 +13,7 @@ testing or account access only a human can provide.
 ```bash
 npm install
 cp .env.example .env   # fill in real values — see below
-npm test                # 62 tests, pure logic, no server/network needed
+npm test                # 119 tests, pure logic, no server/network needed
 npm run typecheck
 npm run dev              # starts the server (webhook receiver + Discord bot)
 ```
@@ -56,11 +58,13 @@ speak-only.
 - `src/index.ts` — Express app entry point, webhook route, boots the Discord bot + background pollers
 - `src/discordBot.ts`, `src/commands/` — Discord client, slash commands (`/link`, `/callsign`, `/mylink`, `/bolo`, `/dispatch`)
 - `src/chatCommands.ts`, `src/parseEvent.ts` — in-game `;`-command parsing and routing
-- `src/db.ts` — SQLite schema (links, verify codes, callsigns)
+- `src/db.ts` — Postgres schema (links, verify codes, callsigns, calls, live units/players) — shared with the `delta-city-cad` website, same database
+- `src/internalApi.ts` — authenticated `POST /internal/announce`, the CAD website's only way to trigger an in-game PA (no ER:LC server key of its own)
 - `src/erlcClient.ts`, `src/robloxClient.ts` — external API clients (ER:LC, Roblox)
 - `src/pursuit.ts`, `src/complianceMonitor.ts`, `src/complianceRules.ts`, `src/nearestUnit.ts`, `src/callDispatch.ts` — dispatch-data-driven features
+- `src/joinReminder.ts`, `src/roleplayHints.ts`, `src/modCallDetector.ts` — background pollers: non-linked-player reminders, roleplay-quality PA hints, mod-call auto-resolution (watches the ER:LC command log for a staff teleport)
 - `src/radioSession.ts`, `src/radioIntents.ts`, `src/speechFormat.ts` — voice protocol logic (pure, tested)
-- `src/voice/` — Discord audio glue: `voiceSession.ts` (join/capture/play, speak side self-tested working), `sttServer.ts` (persistent STT process), `pythonBridge.ts` (TTS)
+- `src/voice/` — Discord audio glue: `voiceSession.ts` (join/capture/play, speak side self-tested working), `sttServer.ts` (persistent STT process), `ttsServer.ts` (persistent TTS process), `activeDispatcherRegistry.ts` (lets other modules speak into an active session without a circular import)
 - `voice/` (top-level) — Python venv, models, and standalone STT/TTS test scripts (gitignored except the scripts themselves)
 - `*.test.ts` files are colocated with what they test, run via `npm test`
 
