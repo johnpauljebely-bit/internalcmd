@@ -142,6 +142,15 @@ export async function initDb(): Promise<void> {
       wanted_stars INTEGER,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- Proposed to the CAD session 2026-08-14, not yet confirmed as the real shape they'll write
+    -- to — see COORDINATION.md. Bot-owned (created here since the bot is the one reading it), but
+    -- the CAD's own server is meant to upsert (discord_id, now()) periodically while a linked
+    -- user has the dashboard open, so cadReminder.ts can tell who's actually logged in right now.
+    CREATE TABLE IF NOT EXISTS cad_activity (
+      discord_id TEXT PRIMARY KEY,
+      last_seen_at TIMESTAMPTZ NOT NULL
+    );
   `);
 
   for (const stmt of [
@@ -483,6 +492,17 @@ export async function getLivePlayerByUsername(username: string): Promise<LivePla
     [username],
   );
   return rows[0];
+}
+
+// null means never seen at all — distinct from "seen, but a while ago" (a real past Date), since
+// cadReminder.ts treats both as "not currently on CAD" but they're different situations worth
+// being able to tell apart in logs.
+export async function getCadLastSeen(discordId: string): Promise<Date | null> {
+  const { rows } = await pool.query<{ last_seen_at: Date }>(
+    "SELECT last_seen_at FROM cad_activity WHERE discord_id = $1",
+    [discordId],
+  );
+  return rows[0]?.last_seen_at ?? null;
 }
 
 // Writes into the CAD's own live_units.status/call_id columns (added by the CAD side for its

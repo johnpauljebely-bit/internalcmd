@@ -1,8 +1,9 @@
 import express, { type Express } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { announcePA } from "./erlcClient.js";
+import { announcePA, sendPrivateMessage } from "./erlcClient.js";
 import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { formatEmergencyCodesForSpeech } from "./speechFormat.js";
+import { findLinkByDiscordId } from "./db.js";
 
 // Plain !== leaks timing information proportional to how many leading characters match — usually
 // theoretical over a network (jitter dominates), but this endpoint shares the same public
@@ -99,4 +100,60 @@ export function registerInternalApi(app: Express): void {
   });
 
   console.log("[internal-api] POST /internal/announce registered");
+
+  // Per COORDINATION.md 2026-08-14: the CAD's browser dispatch alert only reaches officers who
+  // have the CAD tab open. This targets a SPECIFIC officer by Discord ID (unlike /internal/announce,
+  // which is a broadcast to everyone) — an in-game PM, same mechanism ;mod/compliance nags already
+  // use, so an auto-dispatched unit finds out even with the CAD closed.
+  app.post("/internal/notify-unit", express.json(), (req, res) => {
+    console.log(`[internal-api] POST /internal/notify-unit from ${req.ip}`);
+
+    if (!secret) {
+      console.error("[internal-api] INTERNAL_API_SECRET is not set — rejecting all requests");
+      res.status(500).json({ ok: false, error: "server not configured" });
+      return;
+    }
+
+    const provided = req.get("X-Internal-Secret");
+    if (!provided || !secretsMatch(provided, secret)) {
+      console.warn(`[internal-api] rejected — missing or invalid X-Internal-Secret (from ${req.ip})`);
+      res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
+    }
+
+    const body = req.body as { discordId?: unknown; message?: unknown };
+    const discordId = body?.discordId;
+    const message = body?.message;
+    if (typeof discordId !== "string" || discordId.trim().length === 0) {
+      res.status(400).json({ ok: false, error: "discordId (non-empty string) is required" });
+      return;
+    }
+    if (typeof message !== "string" || message.trim().length === 0) {
+      res.status(400).json({ ok: false, error: "message (non-empty string) is required" });
+      return;
+    }
+
+    findLinkByDiscordId(discordId)
+      .then((link) => {
+        if (!link) {
+          console.warn(`[internal-api] notify-unit: discord=${discordId} has no linked Roblox account`);
+          res.status(404).json({ ok: false, error: "no linked Roblox account for this discordId" });
+          return;
+        }
+        return sendPrivateMessage(link.roblox_username, message).then((sent) => {
+          console.log(`[internal-api] notify-unit: PM to ${link.roblox_username} sent=${sent}`);
+          if (sent) {
+            res.status(200).json({ ok: true });
+          } else {
+            res.status(502).json({ ok: false, error: "PM failed — check bot logs" });
+          }
+        });
+      })
+      .catch((err) => {
+        console.error("[internal-api] notify-unit threw", err);
+        res.status(502).json({ ok: false, error: "notify-unit threw — check bot logs" });
+      });
+  });
+
+  console.log("[internal-api] POST /internal/notify-unit registered");
 }

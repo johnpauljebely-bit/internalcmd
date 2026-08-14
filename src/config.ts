@@ -156,6 +156,15 @@ export const JOIN_REMINDER_INTERVAL_MS = 3 * 60_000;
 
 export const ROLEPLAY_HINT_INTERVAL_MS = 7 * 60_000;
 
+// On-duty LEO (Team maps to a department) who are linked but not currently active on the CAD
+// dashboard get PM'd every 2 minutes (user ask, 2026-08-14). "Active" means `cad_activity.
+// last_seen_at` within this staleness window — set a bit above the reminder interval itself as
+// buffer for normal heartbeat jitter, assuming the CAD pings at least every ~1-2min while a tab
+// is open. Depends on the CAD side actually writing to `cad_activity` — proposed via
+// COORDINATION.md, not yet confirmed as built on their end.
+export const CAD_REMINDER_INTERVAL_MS = 2 * 60_000;
+export const CAD_ACTIVITY_STALE_MS = 3 * 60_000;
+
 // Deduped across RCMP + BCHP + Ownership for the /callsign assign rank dropdown — actual validity
 // per department is still checked against CALLSIGN_RANGES when the command runs (this is why
 // picking "Ownership" as the rank under RCMP/BCHP correctly gets rejected — that combination
