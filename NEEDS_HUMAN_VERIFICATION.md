@@ -13,6 +13,23 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   this dev machine's current IP: `173.180.215.120`.** Will need doing again for whatever IP the
   eventual Oracle VM uses. `erlcClient.ts` now specifically detects and logs this 403 case
   clearly instead of a bare "failed: 403", so it should self-diagnose if it happens again.
+- **Cloudflare quick tunnel URL changed again (2026-08-14) — update ER:LC's webhook dashboard.**
+  The tunnel died (stuck in a connection-failure retry loop for a while — the old URL is dead) and
+  was restarted with a fresh URL: `https://importantly-scientist-scan-prostores.trycloudflare.com`.
+  This is the root cause behind a real bug report ("911/panic/traffic-stop don't broadcast in the
+  VC on the live site") — the CAD's Vercel deployment had `BOT_INTERNAL_API_URL` pointing at
+  `http://localhost:3000`, which it can never reach; now pointed at this tunnel URL instead (see
+  COORDINATION.md). **Two things only you can do**: (1) update ER:LC's webhook settings to
+  `https://importantly-scientist-scan-prostores.trycloudflare.com/webhook/erlc` — chat commands
+  (`;verify`, `;mod`, etc.) may have silently stopped arriving when the old tunnel died, separate
+  from the VC-broadcast symptom. (2) **Consider a named tunnel instead of quick tunnels going
+  forward** — confirmed live that quick tunnels genuinely drop some requests even while "up"
+  (`POST /internal/announce` got a real Cloudflare-edge 502 twice in a row while `GET /health`
+  succeeded every time on the same tunnel — cloudflared's own log showed zero errors, so this isn't
+  a bug, it's the documented behavior of account-less tunnels: "no uptime guarantee"). A named
+  tunnel (permanent hostname, real reliability, survives bot restarts without needing a URL update
+  anywhere) needs `cloudflared tunnel login` — interactive browser auth, can't be done unattended.
+  `deploy/README.md` step 5 already has the full named-tunnel setup once you're ready to run that.
 - **No VM exists yet — this is the actual remaining blocker to real hosting.** Still can't sign up
   for Oracle Cloud (or any host) on the user's behalf — needs a real card + personal info. The bot
   currently runs locally on the dev machine via `npx tsx src/index.ts` + a Cloudflare tunnel, not
