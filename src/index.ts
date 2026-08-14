@@ -11,6 +11,7 @@ import { startCallDispatch } from "./callDispatch.js";
 import { startJoinReminder } from "./joinReminder.js";
 import { startRoleplayHints } from "./roleplayHints.js";
 import { startModCallDetector } from "./modCallDetector.js";
+import { startCadReminder } from "./cadReminder.js";
 import { warmUpTtsServer } from "./voice/ttsServer.js";
 import { initDb } from "./db.js";
 import { registerInternalApi } from "./internalApi.js";
@@ -84,6 +85,7 @@ async function main() {
   startJoinReminder();
   startRoleplayHints();
   startModCallDetector();
+  startCadReminder();
   warmUpTtsServer();
 
   app.listen(PORT, () => {
