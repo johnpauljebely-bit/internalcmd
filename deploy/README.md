@@ -55,12 +55,19 @@ diverge.
 ```bash
 sudo -u dispatch git clone <your-repo-url> /opt/delta-city-dispatch
 cd /opt/delta-city-dispatch
-sudo -u dispatch npm install
+sudo -u dispatch npm install            # full install — needed for the build step below
+sudo -u dispatch npm run build          # compiles src/ -> dist/ (tsc)
+sudo -u dispatch npm prune --omit=dev   # strips tsx/typescript/@types/* now dist/ exists — the
+                                         # systemd service runs the compiled output, not tsx, so
+                                         # none of this is needed at runtime (real savings on a
+                                         # small/free-tier host — confirmed live 2026-08-14 that
+                                         # `node dist/index.js` runs standalone)
 sudo -u dispatch cp .env.example .env
 sudo -u dispatch nano .env   # fill in real secrets, including DATABASE_URL from step 3
 
 cd voice
-sudo -u dispatch ./setup.sh   # Vosk + Piper models, ~100MB download
+sudo -u dispatch ./setup.sh   # Piper only (~60MB) — Vosk/STT was archived 2026-08-14 (see
+                               # NEEDS_HUMAN_VERIFICATION.md), this bot is broadcast-only now
 ```
 
 ## 5. Cloudflare Tunnel (named, not quick — quick tunnels' URLs change on every restart, which

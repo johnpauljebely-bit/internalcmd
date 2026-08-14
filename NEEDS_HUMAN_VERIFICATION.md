@@ -32,23 +32,35 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   `deploy/README.md` step 5 already has the full named-tunnel setup once you're ready to run that.
 - **No VM exists yet — this is the actual remaining blocker to real hosting.** Still can't sign up
   for Oracle Cloud (or any host) on the user's behalf — needs a real card + personal info. The bot
-  currently runs locally on the dev machine via `npx tsx src/index.ts` + a Cloudflare tunnel, not
-  on any real server. `deploy/README.md` + the systemd unit are complete and now also cover
-  Postgres provisioning (2026-08-13, was previously missing) — genuinely copy-paste-ready once a
-  VM exists, but untested against a real VM since none has ever existed. **Next action is on the
-  user**: provision any Linux host (Oracle Free Tier, or any other VPS) and follow
-  `deploy/README.md` end to end.
+  currently runs locally on the dev machine + a Cloudflare tunnel, not on any real server.
+  `deploy/README.md` + the systemd unit are complete, cover Postgres provisioning, and (2026-08-14)
+  now run the **compiled build** instead of `npx tsx` — confirmed live that `node dist/index.js`
+  runs standalone with zero dev dependencies installed (`npm run build` then `npm prune --omit=dev`
+  cut `node_modules` from 70MB to 35MB in a real test), meaningfully leaner for a small/free-tier
+  host. Genuinely copy-paste-ready once a VM exists, but untested against a real VM since none has
+  ever existed. **Next action is on the user**: provision any Linux host (Oracle Free Tier, or any
+  other VPS) and follow `deploy/README.md` end to end.
 - **This dev machine (M1, 8GB RAM) is under real memory pressure — one major contributor removed
-  2026-08-14.** Confirmed via `sysctl vm.swapusage` back when STT was still live: **10.6GB of
-  12GB swap in use** immediately after a fresh restart with only Node + the Vosk STT server + the
-  Piper TTS server running — nothing else. The Vosk STT server (one of the two persistent
-  heavy processes) is now gone entirely — the whole voice-understanding side (STT, the rules
-  engine, `src/ai/ollamaFallback.ts` and its never-wired-in local-LLM fallback) was archived per
-  the user's explicit call (see CHANGELOG.md), partly *because* of this exact memory pressure.
-  Only Piper (TTS) remains as a persistent voice-related process now. Haven't re-measured swap
-  freshly post-archive to confirm the improvement quantitatively — worth checking
-  `sysctl vm.swapusage` again next time this comes up if latency complaints persist even for the
-  (now much simpler) broadcast-only voice path.
+  2026-08-14, disk footprint also trimmed the same day.** Confirmed via `sysctl vm.swapusage` back
+  when STT was still live: **10.6GB of 12GB swap in use** immediately after a fresh restart with
+  only Node + the Vosk STT server + the Piper TTS server running — nothing else. The Vosk STT
+  server (one of the two persistent heavy processes) is now gone entirely — the whole
+  voice-understanding side (STT, the rules engine, `src/ai/ollamaFallback.ts` and its
+  never-wired-in local-LLM fallback) was archived per the user's explicit call (see CHANGELOG.md),
+  partly *because* of this exact memory pressure. Only Piper (TTS) remains as a persistent
+  voice-related process now. Same day, also cleaned up real leftover disk usage: removed the Vosk
+  model (~124MB) and 7 orphaned Python packages from `voice/.venv` that nothing actually imported
+  anymore (`vosk`, `websockets`, `requests`, `cffi` + its transitive chain — verified each via `pip
+  show ... Required-by` before removing, then re-tested real TTS synthesis after each round), plus
+  a genuinely stale `dispatch.db` (pre-Postgres SQLite leftover from 2026-08-10, untouched since).
+  Haven't re-measured swap freshly post-archive to confirm the memory improvement quantitatively —
+  worth checking `sysctl vm.swapusage` again next time this comes up if latency complaints persist
+  even for the (now much simpler) broadcast-only voice path.
+- **`logs/events-*.log` grows unbounded, no rotation.** Modest today (~12KB/day at current low
+  webhook volume), but genuinely unbounded — `eventLogger.ts` creates a new file per calendar day
+  and never deletes old ones. Not urgent at this rate, but worth watching once real player traffic
+  is flowing on a real host with a smaller disk budget; not building rotation logic unprompted
+  since the current growth rate doesn't warrant it yet.
 - **Bot's Discord role needs to move up the hierarchy.** Sits at position 1, below basically
   every staff role including the ones `/callsign manage` is gated on. Discord blocks nickname
   changes (and possibly other member-targeted actions) against anyone whose highest role outranks

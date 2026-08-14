@@ -8,7 +8,12 @@ Type=simple
 User=dispatch
 WorkingDirectory=/opt/delta-city-dispatch
 EnvironmentFile=/opt/delta-city-dispatch/.env
-ExecStart=/usr/bin/npx tsx src/index.ts
+# Runs the compiled output (npm run build), not `npx tsx src/index.ts` — confirmed live 2026-08-14
+# that the compiled build runs standalone under plain `node`, no tsx/typescript/@types/* needed at
+# runtime. Meaningfully leaner for a small/free-tier host: no on-the-fly TS transpilation, and
+# `npm ci --omit=dev` after the build step skips installing dev tooling entirely. See
+# deploy/README.md step 4 for the build step this depends on.
+ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=5
 # Caps restart attempts at 5 within a 60s window — without this, a persistently broken config

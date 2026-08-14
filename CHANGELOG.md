@@ -2,6 +2,40 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (cleanup for a smaller host) — Trimmed disk footprint, switched deploy to a compiled build
+
+User wants to actually deploy on a smaller/cheaper host once one exists, so this pass was about
+real footprint, not just tidiness — verified everything with real commands, not assumptions.
+
+**Disk cleanup**: deleted a genuinely stale `dispatch.db` (pre-Postgres SQLite leftover, untouched
+since 2026-08-10) and `.DS_Store`. In `voice/.venv`, removed 8 orphaned Python packages nothing
+actually imports anymore — `vosk` and `websockets` (leftover from the STT archive earlier today),
+then `requests`/`cffi`/`certifi`/`charset-normalizer`/`idna`/`urllib3`/`pycparser` (an old
+`requests`+`cffi` chain, unclear origin, but confirmed via `pip show ... Required-by` that nothing
+current depends on any of them). Verified real TTS synthesis after each removal round, not just
+trusted pip's metadata — `tts_speak.py` and a full bot restart (persistent `tts_server.py` path)
+both still work. `voice/requirements.txt` trimmed to match (17 lines → 7). Also moved the Vosk
+model out earlier today; net effect of both cleanups together: `voice/.venv` went from ~204MB
+(lib alone was 192MB) to ~172MB, `voice/models` from 264MB to 60MB.
+
+**Deploy now uses the compiled build, not `npx tsx`.** Confirmed live: `npm run build` (tsc) then
+`node dist/index.js` runs standalone — full functional restart, `/internal/announce` and
+`/internal/notify-unit` both registered, TTS server ready, zero errors. Then tested
+`npm prune --omit=dev` in an isolated scratch copy (separate port, same real Discord/DB
+credentials briefly — killed immediately after confirming, no lasting duplicate-connection risk):
+cut `node_modules` from 70MB to 35MB, and the pruned build still ran and passed a health check
+clean. `deploy/README.md` step 4 and `deploy/delta-city-dispatch.service`'s `ExecStart` updated
+to match — meaningful savings for a small/free-tier host: no TypeScript/tsx/`@types/*` installed
+at runtime at all, no on-the-fly transpilation overhead.
+
+**Flagged, not built**: `logs/events-*.log` has no rotation and grows forever (modest today,
+~12KB/day) — noted in NEEDS_HUMAN_VERIFICATION.md as worth watching on a real host, not urgent
+enough at current volume to build unprompted.
+
+Local dev instance (`npx tsx src/index.ts`, port 3000) restarted and confirmed healthy after all
+of this — nothing above touched the actual running dev process except the venv package removals,
+which were verified safe both via a standalone script test and a full bot restart.
+
 ## 2026-08-14 (major cut) — Archived voice understanding (STT + rules engine), bot is broadcast-only now
 
 User's call, verbatim: the officer-speaks-to-dispatch side was "slow and knows nothing, like a
