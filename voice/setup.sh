@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# Sets up the Vosk (STT) + Piper (TTS) environment. Models are gitignored (large binaries) —
-# run this after cloning to fetch everything needed.
+# Sets up the Piper (TTS) environment — broadcast-only, matches the bot's own voice/ dir.
+# Models are gitignored (large binaries) — run this after cloning to fetch everything needed.
+#
+# 2026-08-14: STT (Vosk, listening/understanding speech) was archived per the user's explicit
+# call — slow (mostly memory pressure on the dev machine), and fundamentally limited (a
+# hand-coded rules engine, not real understanding). The CAD website now covers what officers
+# needed voice-in for (status updates, attach-to-call, traffic-stop backup dispatch). See
+# ~/Desktop/delta-city-dispatch-voice-understanding-archive/ if this ever needs reviving — that
+# folder has the original setup.sh with the Vosk download step, plus radioSession.ts/
+# radioIntents.ts and their tests, sttServer.ts, and the stt_*.py scripts.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -10,17 +18,6 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 mkdir -p models/piper-voices
-
-# The small model (~40MB) badly mangles real speech — confirmed live, it turned "1409 to
-# dispatch" into things like "vance to dispatch". This lgraph model (~124MB) is meaningfully more
-# accurate but takes 20s+ to load, which is why the live pipeline (src/voice/sttServer.ts) keeps
-# it loaded in a persistent process rather than loading it per utterance.
-if [ ! -d models/vosk-model-en-us-0.22-lgraph ]; then
-  echo "Downloading Vosk en-us-0.22-lgraph model (~124MB)..."
-  curl -sL -o /tmp/vosk-model.zip https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip
-  unzip -q /tmp/vosk-model.zip -d models
-  rm /tmp/vosk-model.zip
-fi
 
 # Ryan — male voice (Piper's lessac voice is female; confirmed via multiple independent voice
 # catalogs plus a local pitch check: ryan ~168Hz vs lessac ~179Hz).
@@ -34,5 +31,4 @@ fi
 
 echo "Done. Test with:"
 echo "  source .venv/bin/activate"
-echo "  python3 stt_transcribe.py test-audio/sample.wav"
 echo "  python3 tts_speak.py 'one four zero nine, go ahead.' test-audio/out.wav"

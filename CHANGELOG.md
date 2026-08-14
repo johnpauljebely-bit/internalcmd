@@ -2,6 +2,52 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (major cut) — Archived voice understanding (STT + rules engine), bot is broadcast-only now
+
+User's call, verbatim: the officer-speaks-to-dispatch side was "slow and knows nothing, like a
+toddler driving a car." Both complaints had real, honest root causes rather than being wrong: slow
+was mostly memory pressure on the dev machine (Vosk STT + Piper TTS + Node together, confirmed
+10.6GB/12GB swap earlier this project), and "knows nothing" was accurate — it was always a
+hand-coded rules engine (`radioIntents.ts`), never real understanding, and the one attempt at an
+AI fallback (`ai/ollamaFallback.ts`, local Ollama) was ruled out on this same machine (a 5-token
+test request took 5+ minutes).
+
+**Did not just delete it.** Per the user's explicit instruction, checked parity with the CAD
+website first (full back-and-forth in COORDINATION.md) before touching anything — didn't want to
+cut a capability that had no replacement. Verdict: 4/5 covered cleanly (status updates, attach-to-
+call via the Panic button + Calls board, plate lookups, 10-code trivia); the one real gap
+(stateful traffic-stop workflow with real nearest-unit backup dispatch) got built fresh on the
+CAD's side rather than staying an accepted loss — real coordinates, a calibrated map transform,
+actual proximity math, not a guess.
+
+**What moved to `~/Desktop/delta-city-dispatch-voice-understanding-archive/`** (not deleted —
+has its own README explaining what's there and how to revive it): `radioSession.ts` +
+`radioIntents.ts` and their tests, `voice/sttServer.ts`, the Python STT scripts
+(`stt_server.py`/`stt_transcribe.py`), the Vosk model itself (~124MB, frees real disk space),
+`ai/ollamaFallback.ts`, and the original `setup.sh`/`requirements.txt` (before this cut).
+
+**What changed in the live bot**:
+- `voiceSession.ts` rewritten from ~250 lines to ~55 — join/connect/speak only, no
+  `receiver.speaking` listener, no opus/ffmpeg decode pipeline, no `radioDeps` wiring.
+  `VoiceDispatcherHandle` no longer has a `.session` field.
+- `pursuit.ts`'s `isPursuitActive()` removed — its only caller (the listen pipeline, which used it
+  to go quiet during a pursuit) no longer exists.
+- `index.ts` no longer warms up an STT server; `commands/dispatch.ts`'s copy updated ("start
+  listening" → "so dispatch can speak announcements into it").
+- `prism-media` dropped from `package.json`'s direct dependencies (still pulled in transitively by
+  `@discordjs/voice` itself, just no longer imported by this codebase's own code). `opusscript`
+  stays — still needed for outbound audio encoding.
+- `voice/setup.sh` and `voice/requirements.txt` no longer set up Vosk — Piper/TTS only now.
+
+**What stays exactly as-is**: `activeDispatcherRegistry.ts`, `ttsServer.ts`, and every
+`announceToActiveDispatcher()` call site from earlier today (calls, panics, BOLOs, pursuits, CAD
+messages) — dispatch can still speak, it just never listens or responds again.
+
+Bot starts noticeably faster now (no more ~20s Vosk model load on startup). tsc clean, test suite
+now 57 tests (down from 123 — the removed 66 were `radioSession.test.ts`/`radioIntents.test.ts`,
+which moved with their source). Restarted, confirmed healthy, `/dispatch` still registers and
+works for broadcast.
+
 ## 2026-08-13 (mod call, rewritten) — Real waiting-room channel + auto-detection via command log, `/mod arrived` removed
 
 User provided the two pieces of missing info from the earlier mod-call build: the real

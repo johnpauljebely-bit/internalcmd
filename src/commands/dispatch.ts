@@ -5,11 +5,11 @@ import { startVoiceDispatcher, type VoiceDispatcherHandle } from "../voice/voice
 
 export const dispatchCommand = new SlashCommandBuilder()
   .setName("dispatch")
-  .setDescription("Enable or disable the voice dispatcher")
+  .setDescription("Enable or disable dispatch voice announcements")
   .addSubcommand((sub) =>
     sub
       .setName("enable")
-      .setDescription("Join a voice channel and start listening")
+      .setDescription("Join a voice channel so dispatch can speak announcements into it")
       .addChannelOption((opt) =>
         opt
           .setName("voice_channel")
@@ -18,7 +18,7 @@ export const dispatchCommand = new SlashCommandBuilder()
           .setRequired(true),
       ),
   )
-  .addSubcommand((sub) => sub.setName("disable").setDescription("Stop the voice dispatcher"));
+  .addSubcommand((sub) => sub.setName("disable").setDescription("Leave the voice channel"));
 
 let activeHandle: VoiceDispatcherHandle | null = null;
 

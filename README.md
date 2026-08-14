@@ -1,9 +1,9 @@
 # Delta City Dispatch
 
 Discord bot + webhook service for the Delta City Roleplay ER:LC server — in-game text commands,
-callsign management, a voice radio dispatcher (STT/TTS), compliance monitoring, and a mod-call
-flow, backed by a Postgres database shared with the companion `delta-city-cad` website. See
-**[BRIEF.md](BRIEF.md)** for the full
+callsign management, broadcast-only voice announcements (TTS), compliance monitoring, and a
+mod-call flow, backed by a Postgres database shared with the companion `delta-city-cad` website.
+See **[BRIEF.md](BRIEF.md)** for the full
 project spec, **[CHANGELOG.md](CHANGELOG.md)** for what's been built and why, and
 **[NEEDS_HUMAN_VERIFICATION.md](NEEDS_HUMAN_VERIFICATION.md)** for what's blocked on live
 testing or account access only a human can provide.
@@ -13,7 +13,7 @@ testing or account access only a human can provide.
 ```bash
 npm install
 cp .env.example .env   # fill in real values — see below
-npm test                # 119 tests, pure logic, no server/network needed
+npm test                # 57 tests, pure logic, no server/network needed
 npm run typecheck
 npm run dev              # starts the server (webhook receiver + Discord bot)
 ```
@@ -26,32 +26,35 @@ the printed URL + `/webhook/erlc` into ER:LC's server settings as the Event Webh
 changes every time `cloudflared` restarts** — re-save it in ER:LC's dashboard whenever that
 happens, or events silently stop arriving.
 
-## Voice dispatcher (Phase 3)
+## Voice dispatcher (broadcast-only)
 
-Needs Python 3 + a one-time model download (~190MB, gitignored — a more accurate Vosk model than
-Vosk's "small" default, since the small one badly mangles real speech, confirmed live):
+Dispatch can join a voice channel and speak announcements (calls, panics, BOLOs, pursuits,
+CAD-triggered messages via `/internal/announce`) into it — it does not listen or try to understand
+speech. The listen/understand side (STT, a rules-engine intent matcher) was archived 2026-08-14;
+see `~/Desktop/delta-city-dispatch-voice-understanding-archive/README.md` if it's ever needed
+again. The CAD website now covers what officers used voice-in for (status updates, attach-to-call,
+traffic-stop backup dispatch).
+
+Needs Python 3 + a one-time Piper voice download (~60MB, gitignored):
 
 ```bash
 cd voice
 ./setup.sh
 source .venv/bin/activate
-python3 stt_transcribe.py test-audio/sample2.wav   # should print a transcript + confidence
 python3 tts_speak.py "one four zero nine, go ahead." test-audio/out.wav
 ```
 
 Voice is `en_US-ryan-medium` (male). In Discord: run `/dispatch enable` and pick a voice channel
-(Director/Executive/Manager role required). See NEEDS_HUMAN_VERIFICATION.md for the exact test
-script (what to say, what to expect back) and current status — playback mechanics are confirmed
-working via a real self-test; STT-on-real-speech has been tested live once, found broken, and
-fixed since, but not yet re-verified live.
+(Director/Executive/Manager role required).
 
 **Say callsigns digit-by-digit** ("one four zero nine"), not as a whole number — confirmed this
-is what both Vosk (STT) and Piper (TTS) handle reliably; whole numbers get badly mangled.
+is what Piper handles reliably; whole numbers get badly mangled ("nine hundred eleven" instead of
+"nine one one" for emergency codes was a real bug, now fixed for numbers embedded in free text
+too — see `formatEmergencyCodesForSpeech` in `speechFormat.ts`).
 
-Every voice pipeline transmission posts a text summary (what was heard + what action was taken)
-in the voice channel's own text-in-voice chat, in addition to speaking the response — this is a
-standing requirement (see memory), not just a debug aid, and should never regress back to
-speak-only.
+Every dispatch-initiated announcement also posts a matching text-chat embed ("Dispatch: ...") in
+the voice channel's own text-in-voice chat, in addition to speaking it — added 2026-08-14 so
+there's a visible log, not just audio that's gone once said.
 
 ## Project structure
 
@@ -63,9 +66,9 @@ speak-only.
 - `src/erlcClient.ts`, `src/robloxClient.ts` — external API clients (ER:LC, Roblox)
 - `src/pursuit.ts`, `src/complianceMonitor.ts`, `src/complianceRules.ts`, `src/nearestUnit.ts`, `src/callDispatch.ts` — dispatch-data-driven features
 - `src/joinReminder.ts`, `src/roleplayHints.ts`, `src/modCallDetector.ts` — background pollers: non-linked-player reminders, roleplay-quality PA hints, mod-call auto-resolution (watches the ER:LC command log for a staff teleport)
-- `src/radioSession.ts`, `src/radioIntents.ts`, `src/speechFormat.ts` — voice protocol logic (pure, tested)
-- `src/voice/` — Discord audio glue: `voiceSession.ts` (join/capture/play, speak side self-tested working), `sttServer.ts` (persistent STT process), `ttsServer.ts` (persistent TTS process), `activeDispatcherRegistry.ts` (lets other modules speak into an active session without a circular import)
-- `voice/` (top-level) — Python venv, models, and standalone STT/TTS test scripts (gitignored except the scripts themselves)
+- `src/speechFormat.ts` — speech-formatting helpers (digit-by-digit numbers, NATO phonetic plates, N-1-1 emergency codes), pure and tested
+- `src/voice/` — Discord audio glue, broadcast-only: `voiceSession.ts` (join + speak), `ttsServer.ts` (persistent TTS process), `activeDispatcherRegistry.ts` (lets other modules speak into an active session + post the matching text-chat embed, without a circular import)
+- `voice/` (top-level) — Python venv, Piper voice model, and TTS test scripts (gitignored except the scripts themselves)
 - `*.test.ts` files are colocated with what they test, run via `npm test`
 
 ## Known guesses that need live confirmation

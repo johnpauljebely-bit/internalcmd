@@ -38,34 +38,17 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   VM exists, but untested against a real VM since none has ever existed. **Next action is on the
   user**: provision any Linux host (Oracle Free Tier, or any other VPS) and follow
   `deploy/README.md` end to end.
-- **This dev machine (M1, 8GB RAM) is under real memory pressure just running the existing stack.**
-  Confirmed via `sysctl vm.swapusage`: **10.6GB of 12GB swap in use** immediately after a fresh
-  restart with only Node + the Vosk STT server + the Piper TTS server running — nothing else. This
-  is a very plausible standing contributor to "laggy as hell" latency complaints beyond anything
-  fixable in application code: when a process's working set gets paged out to swap, the next real
-  work it does (e.g. transcribing an utterance) pays disk I/O to page back in before it can even
-  start. Likely made worse by whatever else is normally open on this machine day-to-day. The
-  planned move to the Oracle VM (above) would give the bot dedicated resources instead of sharing
-  an already-tight 8GB with everything else — that's probably the real fix, not a code change.
-  Tested and ruled out running a local LLM (see the AI-fallback entry below) specifically because
-  of this — there wasn't enough headroom left for it.
-- **AI fallback for unrecognized voice commands — built but NOT wired in, needs a decision.**
-  Requested: when the rules engine can't match an utterance, ask an LLM (with live game context —
-  active calls, online units) for a smarter answer instead of just "10-9, please repeat." Wanted
-  free, so tried a local model via Ollama (`llama3.2:1b`) — installed, pulled, tested live: **a
-  5-token test request took over 5 minutes**, and a follow-up request timed out entirely at 30s,
-  both because of the swap pressure above. Not viable on this machine as-is. Ollama has been
-  stopped (`brew services stop ollama`) so it's not competing for resources in the meantime. The
-  code is written and ready but deliberately not wired into production: `src/ai/ollamaFallback.ts`
-  (the Ollama HTTP client + prompt/context shape) and an optional `generateAiFallback` hook on
-  `RadioDependencies` in `radioSession.ts` (inert when unset — every existing test and the real
-  production `radioDeps` in `voiceSession.ts` both currently omit it, so behavior is unchanged).
-  Three ways forward, all requiring a decision only the user can make: (1) pay for a hosted API
-  (Anthropic/OpenAI) instead — fast, reliable, but not free (rough estimate: a few dollars/month at
-  fallback-only usage since it never touches the hot path for recognized commands); (2) revisit
-  local once the bot moves to the Oracle VM (dedicated RAM, no contention with a dev laptop's other
-  apps); (3) skip the AI fallback and keep improving rules-engine coverage instead, which is what
-  actually fixed today's real complaints (10-code word-vs-digit matching, handshake friction).
+- **This dev machine (M1, 8GB RAM) is under real memory pressure — one major contributor removed
+  2026-08-14.** Confirmed via `sysctl vm.swapusage` back when STT was still live: **10.6GB of
+  12GB swap in use** immediately after a fresh restart with only Node + the Vosk STT server + the
+  Piper TTS server running — nothing else. The Vosk STT server (one of the two persistent
+  heavy processes) is now gone entirely — the whole voice-understanding side (STT, the rules
+  engine, `src/ai/ollamaFallback.ts` and its never-wired-in local-LLM fallback) was archived per
+  the user's explicit call (see CHANGELOG.md), partly *because* of this exact memory pressure.
+  Only Piper (TTS) remains as a persistent voice-related process now. Haven't re-measured swap
+  freshly post-archive to confirm the improvement quantitatively — worth checking
+  `sysctl vm.swapusage` again next time this comes up if latency complaints persist even for the
+  (now much simpler) broadcast-only voice path.
 - **Bot's Discord role needs to move up the hierarchy.** Sits at position 1, below basically
   every staff role including the ones `/callsign manage` is gated on. Discord blocks nickname
   changes (and possibly other member-targeted actions) against anyone whose highest role outranks
@@ -150,27 +133,13 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 - **Panic event — does it even exist?** ER:LC's docs only document `CustomCommand` and
   (implicitly) emergency-call events. No panic event has ever been observed, and there's no
-  official mention of one in the webhook docs. Not built. If/when officer-down actually happens
-  in-game, check `logs/events-*.log` for anything unusual and report back — that's the only way
-  to find out what it looks like, if it exists at all. **Worked around 2026-08-11**, not solved:
-  since dispatch can't auto-detect a panic, an officer can now self-report one by voice ("attach
-  me to the panic at postal X") and dispatch creates the call record on the spot rather than
-  failing to recognize it — see the CHANGELOG entry. Doesn't need this event to ever be confirmed
-  to work; still worth finding out if/when it happens, since an automatic detection would be
-  strictly better than relying on someone remembering to say it.
-- **Status tracking + self-declared calls (2026-08-11) — built, never tested live.** Test all of:
-  (1) say "1500 to dispatch show me 10-8" — expect "10-4, I understand, one five zero zero" spoken
-  back, and `psql delta_city -c "select status, call_id from live_units where callsign_key='...'"`
-  should show `status='available'`, `call_id` cleared to NULL. (2) With an active call already on
-  file at a known postal, say "attach me to [description] at postal X" — expect attachment +
-  `status='enroute'` + `call_id` set to that call. (3) With NO active call at some postal, say
-  "attach me to the panic at postal X" — expect a brand new call to appear in `calls`
-  (`source='leo'`), an RTO text post + in-game PA announcement about it, and the reporting unit
-  attached + enroute. Then have a SECOND unit say "attach me to case #{that new case number}" and
-  confirm they can also attach to the self-declared call same as any other. (4) Say "show me
-  enroute to the call at postal X" (combined status+attach in one utterance) and confirm both the
-  attach and the status/call_id update happen together, with a single natural spoken response
-  rather than two separate exchanges.
+  official mention of one in the webhook docs. Not built, and no longer this repo's problem to
+  solve: the original voice-based workaround (an officer self-reporting "attach me to the panic
+  at postal X," which self-declared a call on the spot) was archived 2026-08-14 along with the
+  rest of voice-understanding. The CAD's dashboard Panic button now does the same self-declare
+  (`type='panic'`, confirmed via COORDINATION.md), so this is fully covered on the website side —
+  still worth finding out what the real event looks like if it ever fires, but nothing depends on
+  it anymore.
 - **`TEAM_TO_DEPARTMENT` mapping (src/config.ts).** Guessed strings ("Delta Police Department",
   "RCMP", "BCHP") for ER:LC's live `Team` field — server has been empty every time it's been
   polled, so these have never been checked against a real online player. The compliance monitor
@@ -196,80 +165,30 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   have been seen filtered or unfiltered in-game yet.
 - **Traffic-stop-fleeing auto-detection.** Explicitly unbuilt — no known ER:LC event/field for
   "vehicle fled a stop." If you find one (a webhook event, a sudden speed/position delta, a
-  vehicle-status field), it needs figuring out live; nothing to build against yet.
-- **Full traffic-stop voice workflow — never tested live, only unit-tested against fixtures.**
-  With voice enabled and two linked/on-duty officers: say "{callsign} traffic stop when ready" →
-  wait for go-ahead → "I'll be on a 10-11 postal 910 highway 55 with a red 4-door sedan. 28 when
-  ready" → expect "28, go ahead" → say "28 reading ABC123" → expect the plate read back with NATO
-  phonetics + "do you need additional units?" → say "yes" → expect the OTHER officer's real
-  callsign announced as dispatched, with a postal. Then check `sqlite3 dispatch.db "select * from
-  traffic_stops; select * from traffic_stop_units;"` to confirm it persisted. The "nearest unit"
-  lookup uses the REPORTING officer's own live position (not a geocoded postal — there's no such
-  mapping), so it needs both officers actually online and positioned somewhere apart to produce a
-  meaningful "nearest" pick rather than a trivial one-candidate result.
-- **Active-call announcement + "attach to call" (by description OR case number).** Never tested
-  against a real call (still none observed). `call.Description` is assumed to be the crime type
-  text — unconfirmed. Postal is a best-effort approximation (nearest unit's own postal, since
-  `ErlcCall` has no postal field of its own). Test: when a real call fires, confirm the RTO/PA/voice
-  announcement reads sensibly ("all units be advised, active {what shows here} at postal {what
-  shows here}, case number {the call's real CallNumber}"), then have a linked officer say
-  "{callsign} attach to {something matching the call description}" AND separately "{callsign}
-  attach me to case #{the real case number}" and confirm dispatch responds correctly to both, with
-  their real callsign + a postal, and that `calls`/`call_units` in `dispatch.db` actually got the
-  rows (`sqlite3 dispatch.db "select * from calls; select * from call_units;"`).
+  vehicle-status field), it needs figuring out live; nothing to build against yet. Note: the
+  traffic-stop *voice* workflow this used to sit alongside was archived 2026-08-14 — the CAD's
+  dashboard now owns traffic-stop tracking, including real nearest-unit backup dispatch.
+- **Active-call announcement (RTO/PA/voice broadcast) — never tested against a real call.**
+  `call.Description` is assumed to be the crime type text — unconfirmed. Postal is a best-effort
+  approximation (nearest unit's own postal, since `ErlcCall` has no postal field of its own). Test:
+  when a real call fires, confirm the RTO/PA/voice announcement reads sensibly ("all units be
+  advised, active {what shows here} at postal {what shows here}, case number {the call's real
+  CallNumber}"). (Attaching to a call by voice was archived 2026-08-14 along with the rest of
+  voice-understanding — attaching now happens through the CAD's Calls board.)
 
 ## Needs a real Discord voice channel + live human (Phase 3)
 
-**Status as of the fourth live test round:** speak direction confirmed working via self-test
-(real VC join + playback, zero errors). Listen direction has been live-tested three times now,
-each round finding and fixing a real issue: (1) small STT model mangled real speech → swapped for
-a bigger/more accurate one, (2) handshake matcher too rigid for how people actually talk →
-tolerant of filler words and compound number words now, (3) callsign addressing trusted parsed
-digits over real identity, rules engine gave up too easily, and response latency was bad on two
-fronts (STT AND TTS both reloading their models per-utterance) → all four fixed this round
-(real DB callsign lookup, fuzzier intent matching, persistent TTS process, "10-9, please repeat"
-phrasing). None of round 4's fixes have been tested live yet. Voice is `en_US-ryan-medium` (male).
-Command is `/dispatch enable [voice_channel]` / `/dispatch disable`, Director/Executive/Manager
-role required.
+**2026-08-14: rebuilt as broadcast-only.** The listen/understand side (STT, handshake protocol,
+rules-engine intent matching — everything the old test plan here covered) was archived per the
+user's explicit call; it's not part of this bot anymore (see CHANGELOG.md and
+`~/Desktop/delta-city-dispatch-voice-understanding-archive/README.md`). What's left: dispatch can
+join a voice channel and speak pre-scripted announcements into it (calls, panics, BOLOs, pursuits,
+CAD-triggered messages via `/internal/announce`) — confirmed working via direct self-test (real VC
+join + playback, zero errors) and via today's live debugging session (real announcements heard,
+including the double-broadcast bug that got fixed). Voice is `en_US-ryan-medium` (male). Command is
+`/dispatch enable [voice_channel]` / `/dispatch disable`, Director/Executive/Manager role required.
 
-**How to test once you're back:**
-1. Run `/dispatch enable` and pick a voice channel. Should reply "Voice dispatcher enabled in
-   **[channel name]**." and the bot should visibly join it.
-2. Say your callsign followed by "dispatch" or "central" — digit-by-digit is still most reliable
-   ("one four zero nine dispatch") but compound words should work too ("fourteen oh nine
-   dispatch"), and the connector word before the cue word no longer needs to be exactly "to."
-   **As of 2026-08-10 you can also just say "dispatch" or "central" alone with no digits at all** —
-   the real callsign always comes from who's actually on the voice connection, not from parsed
-   digits, so this should work fine. Expect to hear back "**{your real assigned callsign}**, go
-   ahead" — **should be YOUR actual callsign from `/callsign assign` or `/mylink`, not necessarily
-   whatever digits you said** — plus a text summary in the channel's own chat. If you don't have a
-   callsign assigned, expect "unassigned unit, go ahead" instead.
-2b. **New**: say the handshake and your actual command together in one breath, e.g. "1500 to
-   dispatch show me 10-8" — should be answered directly, no separate "go ahead" round-trip needed
-   first. This was the top complaint from the last live round; confirm it actually feels natural
-   now, not just technically working.
-3. Say something recognized with some natural filler around it, e.g. "uh can you check plate
-   ABC123 for me" or "my status is en route." Should work now, not just the exact bare phrasing.
-   Also try a 10-code lookup phrased as "show me 10-8" (not just "what's 10-8") — this specific
-   phrasing was confirmed broken in the last live round and should be fixed now.
-4. Say something the rules engine won't recognize. Expect **"10-9, please repeat, {your
-   callsign}"** (changed from "say again").
-4b. **New**: try "attach me to case #{a real case number from an active call}" as an alternative to
-   "attach to {crime description}" — both should work.
-5. **Response speed** — should feel meaningfully faster than round 3 (both STT and TTS now stay
-   loaded in persistent processes instead of reloading per response). Still not instant; report
-   back on whether it's fast enough now or still needs work.
-6. Try `/bolo` (and a pursuit via `;ps`, if you can safely trigger one) while the voice dispatcher
-   is enabled — the announcement should now be SPOKEN in the VC, not just posted as text/PA.
-7. With a second person, test the hold-queue behavior as before.
-8. Run `/dispatch disable` to end the session.
-
-**Known rough edges to watch for, not yet tunable from real data:**
-- `LOW_CONFIDENCE_THRESHOLD` (0.6) — real confidence scores are wired through, but the threshold
-  itself is untested against real speech. May need tuning.
-- Utterance segmentation uses `EndBehaviorType.AfterSilence` with a 1000ms gap — untested whether
-  that's too short (cuts off mid-sentence) or too long (feels laggy).
-- Discord audio channel count assumed stereo (`channels: 2`) per Discord's standard Opus config —
-  unverified this matches what `@discordjs/voice`'s receiver actually delivers in practice.
-- 10-code list (`TEN_CODES` in `radioIntents.ts`) is a generic BC/RCMP guess, not confirmed
-  against what this community actually uses.
+**Still worth confirming live**: run `/dispatch enable`, then trigger a 911 call/panic/BOLO/pursuit
+and confirm it's actually spoken in the channel (not just PA'd) — and confirm the new text-chat
+embed (2026-08-14) shows up in that channel's own text-in-voice chat alongside it, prefixed
+"Dispatch: ...".

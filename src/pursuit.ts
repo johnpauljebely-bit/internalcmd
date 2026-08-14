@@ -18,12 +18,6 @@ const state: PursuitState = {
   intervalHandle: null,
 };
 
-// Consulted by the voice pipeline to suppress STT/response handling in RTO while a pursuit is
-// active (see voiceSession.ts's handleUtterance).
-export function isPursuitActive(): boolean {
-  return state.active;
-}
-
 async function currentCallsignAndPostal(robloxUserId: string): Promise<{ callsign: string; postal: string }> {
   const players = await getServerPlayers();
   const player = players?.find((p) => p.Player.split(":")[1] === robloxUserId);

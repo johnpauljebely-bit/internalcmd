@@ -5,9 +5,9 @@ import path from "node:path";
 const VOICE_DIR = path.join(process.cwd(), "voice");
 const PYTHON = path.join(VOICE_DIR, ".venv", "bin", "python3");
 
-// Same rationale as sttServer.ts: spawning the "piper" CLI fresh per response reloads the ONNX
-// voice every time. Confirmed via direct timing: ~4s one-time load, then 0.5-2s per synthesis
-// with a persistent process, vs. paying a full reload on every single dispatch response.
+// Spawning the "piper" CLI fresh per response reloads the ONNX voice every time. Confirmed via
+// direct timing: ~4s one-time load, then 0.5-2s per synthesis with a persistent process, vs.
+// paying a full reload on every single dispatch response.
 let proc: ChildProcessWithoutNullStreams | null = null;
 let ready: Promise<void> | null = null;
 const pending: Array<(line: string) => void> = [];
