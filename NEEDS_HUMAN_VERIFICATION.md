@@ -128,6 +128,18 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
   rather than assuming a fixed position, but this needs a real staff `:tp` to confirm it actually
   matches. Also confirm the full loop end to end: `;mod` drags the caller + PMs them + logs to
   server-management, then a real staff `:tp` to that player resolves it within ~10s.
+- **CAD-login reminder (`cadReminder.ts`) — never tested live end-to-end.** Depends on the CAD's
+  new `cad_activity` heartbeat (confirmed real rows are landing there as of 2026-08-14), so this is
+  now enabled and running (every 2min). Confirm live: an on-duty, linked officer with the CAD tab
+  closed gets PM'd "Get onto the CAD dashboard now — you're expected to be logged in while on
+  duty."; opening the CAD (and staying on it) should stop the PMs within one poll cycle once their
+  heartbeat lands. Also worth confirming the 3-minute staleness window (`CAD_ACTIVITY_STALE_MS`)
+  isn't too tight against the CAD's actual 90s heartbeat interval — should be comfortable margin,
+  but untested under real network conditions.
+- **`POST /internal/notify-unit` — never tested live end-to-end.** Endpoint is registered and the
+  CAD says its `notifyUnit()` calls are already wired into every auto-dispatch path (Traffic Stop
+  backup, 911/311 auto-dispatch), previously no-oping since the route didn't exist. Confirm a real
+  auto-dispatch actually results in an in-game PM now.
 
 ## Needs live gameplay to confirm (can't synthesize)
 
