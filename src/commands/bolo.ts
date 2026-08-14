@@ -3,7 +3,7 @@ import { findLinkByDiscordId } from "../db.js";
 import { containerMessage } from "../ui.js";
 import { announceToRTO } from "../discordBot.js";
 import { announcePA } from "../erlcClient.js";
-import { speakToActiveDispatcher } from "../voice/activeDispatcherRegistry.js";
+import { announceToActiveDispatcher } from "../voice/activeDispatcherRegistry.js";
 import { formatPlateForSpeech } from "../speechFormat.js";
 
 export const boloCommand = new SlashCommandBuilder()
@@ -49,7 +49,7 @@ export async function handleBoloCommand(interaction: ChatInputCommandInteraction
   // Goes through Roblox's chat filter via virtual server management, same caveat as pursuit
   // announcements — test the exact phrasing in-game before relying on it. Also spoken through
   // the voice dispatcher if one's currently enabled (no-ops otherwise).
-  await Promise.all([announceToRTO(message), announcePA(message), speakToActiveDispatcher(spokenMessage)]);
+  await Promise.all([announceToRTO(message), announcePA(message), announceToActiveDispatcher(spokenMessage)]);
 
   await interaction.editReply(containerMessage("BOLO broadcast sent."));
 }

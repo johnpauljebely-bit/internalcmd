@@ -1,6 +1,6 @@
 import { announceToRTO } from "./discordBot.js";
 import { getServerPlayers, announcePA } from "./erlcClient.js";
-import { speakToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
+import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { findLinkByRobloxUserId, getCallsignsByDiscordId } from "./db.js";
 import { formatForSpeech } from "./speechFormat.js";
 
@@ -48,7 +48,7 @@ async function currentCallsignAndPostal(robloxUserId: string): Promise<{ callsig
 async function announceEverywhere(build: (fmt: (v: string) => string) => string) {
   const textAndPa = build((v) => v);
   const spoken = build(formatForSpeech);
-  await Promise.all([announceToRTO(textAndPa), announcePA(textAndPa), speakToActiveDispatcher(spoken)]);
+  await Promise.all([announceToRTO(textAndPa), announcePA(textAndPa), announceToActiveDispatcher(spoken)]);
 }
 
 export async function startPursuit(officerRobloxId: string, vehicleDescription: string) {

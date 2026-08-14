@@ -38,7 +38,7 @@ import {
 } from "../db.js";
 import { isPursuitActive } from "../pursuit.js";
 import { containerMessage } from "../ui.js";
-import { setActivePlayer, speakOn } from "./activeDispatcherRegistry.js";
+import { setActivePlayer, setActiveChannel, speakOn } from "./activeDispatcherRegistry.js";
 import {
   findActiveCallByText,
   findActiveCallByCaseNumber,
@@ -146,6 +146,7 @@ export async function startVoiceDispatcher(channel: VoiceBasedChannel): Promise<
   let stopped = false;
 
   setActivePlayer(player);
+  setActiveChannel(channel);
 
   const onSpeakingStart = (userId: string) => {
     handleUtterance(userId).catch((err) => console.error(`[voice] utterance handling failed for ${userId}`, err));
@@ -237,6 +238,7 @@ export async function startVoiceDispatcher(channel: VoiceBasedChannel): Promise<
   function stop() {
     stopped = true;
     setActivePlayer(null);
+    setActiveChannel(null);
     receiver.speaking.removeListener("start", onSpeakingStart);
     connection.destroy();
   }

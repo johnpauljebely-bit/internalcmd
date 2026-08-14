@@ -1,7 +1,8 @@
 import express, { type Express } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { announcePA } from "./erlcClient.js";
-import { speakToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
+import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
+import { formatEmergencyCodesForSpeech } from "./speechFormat.js";
 
 // Plain !== leaks timing information proportional to how many leading characters match — usually
 // theoretical over a network (jitter dominates), but this endpoint shares the same public
@@ -32,6 +33,14 @@ export function registerInternalApi(app: Express): void {
   // Scoped express.json() here, not applied globally in index.ts — the webhook route needs the
   // raw, unparsed body for Ed25519 verification, so a global JSON parser would break it.
   app.post("/internal/announce", express.json(), (req, res) => {
+    // Logs every hit, including rejections — added 2026-08-14 after a real debugging session
+    // where "is the CAD even reaching this endpoint at all" was genuinely unanswerable from the
+    // logs as they existed (this handler only ever logged the registered-at-startup line and a
+    // couple of narrow failure paths; a rejected/malformed request left zero trace). Now that this
+    // endpoint sits behind a public tunnel, it'll also see stray internet scanner traffic — that's
+    // fine and expected, still worth being able to tell apart from a real misconfigured caller.
+    console.log(`[internal-api] POST /internal/announce from ${req.ip}`);
+
     if (!secret) {
       console.error("[internal-api] INTERNAL_API_SECRET is not set — rejecting all requests");
       res.status(500).json({ ok: false, error: "server not configured" });
@@ -41,30 +50,51 @@ export function registerInternalApi(app: Express): void {
     // Reject on a bad/missing secret before touching anything else.
     const provided = req.get("X-Internal-Secret");
     if (!provided || !secretsMatch(provided, secret)) {
+      console.warn(`[internal-api] rejected — missing or invalid X-Internal-Secret (from ${req.ip})`);
       res.status(401).json({ ok: false, error: "unauthorized" });
       return;
     }
 
-    const message = (req.body as { message?: unknown })?.message;
+    const body = req.body as { message?: unknown; spokenMessage?: unknown };
+    const message = body?.message;
     if (typeof message !== "string" || message.trim().length === 0) {
+      console.warn("[internal-api] rejected — message body missing/empty");
       res.status(400).json({ ok: false, error: "message (non-empty string) is required" });
       return;
     }
 
-    Promise.all([announcePA(message), speakToActiveDispatcher(message)])
-      .then(([sent]) => {
-        // ER:LC PA success/failure still drives the HTTP response — the voice dispatcher is a
-        // best-effort bonus channel (frequently not enabled at all), not something a caller
-        // should get a 502 over if voice happens to be off.
-        if (sent) {
-          res.status(200).json({ ok: true });
+    // Optional pre-formatted spoken version — added 2026-08-14 so the CAD can send its own
+    // properly-formatted speech text for things the bot can't infer from opaque free text (e.g. a
+    // license plate that should be read with the NATO phonetic alphabet, matching how BOLO/traffic
+    // stop already do it elsewhere in this codebase). Falls back to `message` if not given. Either
+    // way, X11 emergency codes (911, 311, etc.) get digit-by-digit speech applied automatically —
+    // confirmed live as a real bug: Piper read a bare "911" as "nine hundred eleven" instead of
+    // "nine one one", since this endpoint never applied any of the number-formatting the bot's own
+    // constructed announcements (BOLO, pursuit, calls) already do per-field.
+    const spokenMessageInput = typeof body?.spokenMessage === "string" ? body.spokenMessage : message;
+    const spokenMessage = formatEmergencyCodesForSpeech(spokenMessageInput);
+
+    console.log(`[internal-api] announcing: "${message.slice(0, 120)}"`);
+
+    Promise.all([announcePA(message), announceToActiveDispatcher(spokenMessage)])
+      .then(([sent, spoken]) => {
+        console.log(`[internal-api] result: PA sent=${sent}, spoken=${spoken}`);
+        // Success if EITHER channel got the message through — critical fix (2026-08-14): this used
+        // to key success purely off `sent` (ER:LC PA), which meant this endpoint returned a 502
+        // for EVERY call while ER:LC's IP isn't allowlisted (a known, separate, already-documented
+        // issue), even on calls where the voice announcement worked perfectly. Once the CAD added
+        // retry-on-5xx logic, that false 502 caused a genuine duplicate broadcast — confirmed live
+        // via these very logs, the exact same message announced twice a couple seconds apart. Only
+        // report failure when BOTH channels genuinely failed.
+        if (sent || spoken) {
+          res.status(200).json({ ok: true, pa: sent, voice: spoken });
         } else {
-          res.status(502).json({ ok: false, error: "ER:LC announcement failed — check bot logs" });
+          res.status(502).json({ ok: false, error: "announcement failed on both PA and voice — check bot logs" });
         }
       })
       .catch((err) => {
         console.error("[internal-api] announce threw", err);
-        res.status(502).json({ ok: false, error: "ER:LC announcement failed — check bot logs" });
+        res.status(502).json({ ok: false, error: "announcement threw — check bot logs" });
       });
   });
 

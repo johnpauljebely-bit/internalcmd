@@ -2,7 +2,7 @@ import { getServerCalls, type ErlcCall } from "./erlcClient.js";
 import { findNearestUnit } from "./nearestUnit.js";
 import { announceToRTO } from "./discordBot.js";
 import { announcePA } from "./erlcClient.js";
-import { speakToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
+import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { recordNewCall, markCallCleared, getActiveCalls, type CallRow } from "./db.js";
 import { formatForSpeech } from "./speechFormat.js";
 
@@ -74,7 +74,7 @@ async function announceNewCall(call: ErlcCall) {
   await Promise.all([
     announceToRTO(textAnnouncement),
     announcePA(spokenAnnouncement),
-    speakToActiveDispatcher(spokenAnnouncement),
+    announceToActiveDispatcher(spokenAnnouncement),
   ]);
 }
 
@@ -165,7 +165,7 @@ export function startCallDispatch() {
           await Promise.all([
             announceToRTO(`Call cleared: #${id}`),
             announcePA(`Call cleared, case number ${id}.`),
-            speakToActiveDispatcher(`Call cleared, case number ${formatForSpeech(id)}.`),
+            announceToActiveDispatcher(`Call cleared, case number ${formatForSpeech(id)}.`),
           ]);
         }
       }

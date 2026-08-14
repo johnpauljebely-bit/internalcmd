@@ -18,6 +18,18 @@ export function formatForSpeech(value: string): string {
   return /^\d+$/.test(value) ? formatCallsignForSpeech(value) : value;
 }
 
+// N-1-1 service codes (911, 311, 211, 411, 511, 611, 711, 811) are always spoken digit-by-digit in
+// real dispatch convention ("nine one one," never "nine hundred eleven") — confirmed live as a
+// real bug in CAD-originated messages (911 calls, panics) routed through /internal/announce,
+// which arrive as one free-text sentence rather than structured fields the bot can format
+// individually the way it does for its own constructed announcements (postal, case number, etc.
+// via formatForSpeech above). Deliberately scoped to exactly this X11 pattern rather than
+// digit-ifying every number in free text — that would also mangle legitimate cardinal-quantity
+// phrasing like "3 units responding" or "24 hour standby."
+export function formatEmergencyCodesForSpeech(text: string): string {
+  return text.replace(/\b[2-9]11\b/g, (match) => formatCallsignForSpeech(match));
+}
+
 // NATO phonetic alphabet, per request — use for any plate spoken aloud.
 const NATO_ALPHABET: Record<string, string> = {
   A: "Alpha",
