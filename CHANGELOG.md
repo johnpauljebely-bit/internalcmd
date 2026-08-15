@@ -2,6 +2,29 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (policy change) — Dispatch/police traffic no longer goes out over ER:LC's in-game PA
+
+User flagged (after seeing a `:h` command 422 for an officer panic broadcast) that police/dispatch
+radio traffic shouldn't be visible to civilian players at all — `:h` broadcasts server-wide to
+every player, not just officers. Removed the `announcePA()` (`:h`) leg from every dispatch/police
+broadcast path: `pursuit.ts` (pursuit start/update), `callDispatch.ts` (new call, call cleared,
+voice-declared calls), `commands/bolo.ts` (`/bolo`), and `internalApi.ts` (`/internal/announce` —
+covers both the CAD's civilian 911 quick-form and its panic button, since both route through the
+same endpoint). All of these still broadcast to the RTO Discord channel (text) and the voice
+dispatcher (spoken), just no longer in-game.
+
+**Left untouched, deliberately**: `commands/session.ts`'s session start/shutdown PA sequence (that
+IS meant to be server-wide — it's telling every player the session is starting/ending) and
+`roleplayHints.ts`'s periodic atmosphere hints (general server flavor text, not dispatch traffic).
+
+This also sidesteps the standing ER:LC IP-allowlist 403 issue for all of these paths, though that
+wasn't the motivation — the allowlist is still stale and would still need fixing for
+session start/shutdown PA and roleplay hints to work.
+
+tsc clean, 57/57 tests passing. Deployed live via SFTP (`dist/pursuit.js`, `dist/callDispatch.js`,
+`dist/commands/bolo.js`, `dist/internalApi.js`) — still needs a manual restart via the Orihost
+panel to take effect.
+
 ## 2026-08-14 (bugfix) — CAD-originated 911 calls weren't broadcasting at all
 
 User reported calls placed through the CAD website's 911 quick-form weren't broadcasting. Root
