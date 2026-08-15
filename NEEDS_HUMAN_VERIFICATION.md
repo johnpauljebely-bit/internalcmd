@@ -4,42 +4,51 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 ## Blocking / needs action
 
-- **ER:LC hasn't allowlisted this bot's IP — every `:h` command has been silently failing.**
-  Confirmed via a real API call: `403 {"code":4000,"message":"You are not authorized to perform
-  this action on this server. If you are creating your own custom bot, visit
-  https://api.erlc.gg/server-owners to allowlist your IP address."}`. This affects BOLO
-  broadcasts, pursuit PA announcements, and (once enabled) compliance force-respawn/PM actions —
-  all of them, silently, this whole time. **Visit https://api.erlc.gg/server-owners and allowlist
-  this dev machine's current IP: `173.180.215.120`.** Will need doing again for whatever IP the
-  eventual Oracle VM uses. `erlcClient.ts` now specifically detects and logs this 403 case
-  clearly instead of a bare "failed: 403", so it should self-diagnose if it happens again.
-- **Cloudflare quick tunnel URL changed again (2026-08-14) — update ER:LC's webhook dashboard.**
-  The tunnel died (stuck in a connection-failure retry loop for a while — the old URL is dead) and
-  was restarted with a fresh URL: `https://importantly-scientist-scan-prostores.trycloudflare.com`.
-  This is the root cause behind a real bug report ("911/panic/traffic-stop don't broadcast in the
-  VC on the live site") — the CAD's Vercel deployment had `BOT_INTERNAL_API_URL` pointing at
-  `http://localhost:3000`, which it can never reach; now pointed at this tunnel URL instead (see
-  COORDINATION.md). **Two things only you can do**: (1) update ER:LC's webhook settings to
-  `https://importantly-scientist-scan-prostores.trycloudflare.com/webhook/erlc` — chat commands
-  (`;verify`, `;mod`, etc.) may have silently stopped arriving when the old tunnel died, separate
-  from the VC-broadcast symptom. (2) **Consider a named tunnel instead of quick tunnels going
-  forward** — confirmed live that quick tunnels genuinely drop some requests even while "up"
-  (`POST /internal/announce` got a real Cloudflare-edge 502 twice in a row while `GET /health`
-  succeeded every time on the same tunnel — cloudflared's own log showed zero errors, so this isn't
-  a bug, it's the documented behavior of account-less tunnels: "no uptime guarantee"). A named
-  tunnel (permanent hostname, real reliability, survives bot restarts without needing a URL update
-  anywhere) needs `cloudflared tunnel login` — interactive browser auth, can't be done unattended.
-  `deploy/README.md` step 5 already has the full named-tunnel setup once you're ready to run that.
-- **No VM exists yet — this is the actual remaining blocker to real hosting.** Still can't sign up
-  for Oracle Cloud (or any host) on the user's behalf — needs a real card + personal info. The bot
-  currently runs locally on the dev machine + a Cloudflare tunnel, not on any real server.
-  `deploy/README.md` + the systemd unit are complete, cover Postgres provisioning, and (2026-08-14)
-  now run the **compiled build** instead of `npx tsx` — confirmed live that `node dist/index.js`
-  runs standalone with zero dev dependencies installed (`npm run build` then `npm prune --omit=dev`
-  cut `node_modules` from 70MB to 35MB in a real test), meaningfully leaner for a small/free-tier
-  host. Genuinely copy-paste-ready once a VM exists, but untested against a real VM since none has
-  ever existed. **Next action is on the user**: provision any Linux host (Oracle Free Tier, or any
-  other VPS) and follow `deploy/README.md` end to end.
+- **Bot moved off the dev machine entirely (2026-08-14) — now hosted on Orihost (Pterodactyl,
+  free tier).** Real infrastructure change: no longer `npx tsx` + a Cloudflare tunnel on the dev
+  Mac — that tunnel is stopped, that whole approach is dead. Live at `176.100.37.91:30172`,
+  confirmed externally reachable via a direct `/health` check. **The Oracle VM plan in
+  `deploy/README.md` is now a secondary/future option, not the active path** — Orihost is free,
+  no card required, and already working. Real problems hit and fixed along the way, useful context
+  if this ever needs debugging again:
+  - The container needs the app bound to its *specific* allocated port (`30172` here), not an
+    arbitrary internal one — Pterodactyl doesn't do port remapping. `index.ts` now falls back to
+    `SERVER_PORT` (Pterodactyl's standard env var) if `PORT` isn't set, but `PORT=30172` is also
+    set explicitly in the remote `.env` since it wasn't confirmed whether Orihost actually injects
+    `SERVER_PORT` — the explicit value is the one actually in effect.
+  - Their file manager's "Unarchive" wraps zip contents in a folder named after the archive
+    instead of extracting flat — cost a full crash-loop cycle (`Cannot find module
+    '/home/container/dist/index.js'`) before catching it. Files had to be moved up a level.
+  - Their Node egg auto-runs `npm install` on every boot if `package.json` exists at the root —
+    intentional, uploading `node_modules` yourself gets silently skipped.
+  - **No shell/console access on this host** — deployed via SFTP (`de-vip-01.orihost.com:2022`)
+    instead. Any future code change needs re-uploading manually (`dist/index.js` at minimum,
+    `voice/`/`package.json` if those change) — there's no auto-update, since `GIT_ADDRESS` etc.
+    aren't set. Could switch to git-based auto-deploy (this repo already has a real GitHub remote)
+    by setting `GIT_ADDRESS`/`BRANCH`/`USERNAME`/`ACCESS_TOKEN`/`AUTO_UPDATE=1` in Orihost's
+    Startup variables — not done yet, current process is manual SFTP re-sync.
+- **ER:LC's IP allowlist needs updating for the NEW outbound IP.** The old allowlisted IP
+  (`173.180.215.120`) was the dev machine's — now that outbound ER:LC API calls come from Orihost
+  instead, that allowlist entry is stale. Pterodactyl containers typically share their node's
+  public IP for outbound traffic, so `176.100.37.91` (the same IP used for the port allocation) is
+  the reasonable guess, but **not confirmed** — visit https://api.erlc.gg/server-owners and check/
+  update. Until this is done, every `:h`/PA/force-respawn call will keep failing with the same 403
+  this was already failing with before, just from a different IP now.
+- **No HTTPS/domain — plain `http://176.100.37.91:30172`.** Orihost's free tier doesn't provide a
+  domain. Works for the CAD's server-to-server fetch calls (HTTP is fine there), but ER:LC's
+  webhook dashboard might reject a non-HTTPS URL outright — untested as of this writing. If it
+  does, the fix is running a Cloudflare Tunnel pointed at this IP:port instead of `localhost` (same
+  mechanism as before, just needs to run somewhere with real always-on access, not the dev laptop
+  this time, or the whole point of moving off it is undermined).
+- **Voice/Piper TTS is NOT set up on Orihost — confirmed non-fatal, but voice announcements don't
+  work there yet.** `voice/setup.sh` needs to actually execute on the real container (downloads
+  the Piper model, builds a matching Python venv) — with no console access, there's no way to
+  trigger this automatically the way `deploy/README.md`'s VM path could. Confirmed live this
+  doesn't crash anything (`[process] uncaught exception (kept running) ... spawn
+  /home/container/voice/.venv/bin/python3 ENOENT` — caught by the existing safety net), just means
+  `announceToActiveDispatcher`'s spoken half silently no-ops on this host. Needs either (a) Orihost
+  support confirming some way to run one-off setup commands, or (b) switching to a host with real
+  shell access for voice to work.
 - **This dev machine (M1, 8GB RAM) is under real memory pressure — one major contributor removed
   2026-08-14, disk footprint also trimmed the same day.** Confirmed via `sysctl vm.swapusage` back
   when STT was still live: **10.6GB of 12GB swap in use** immediately after a fresh restart with

@@ -16,7 +16,11 @@ import { warmUpTtsServer } from "./voice/ttsServer.js";
 import { initDb } from "./db.js";
 import { registerInternalApi } from "./internalApi.js";
 
-const PORT = Number(process.env.PORT ?? 3000);
+// Pterodactyl (Orihost, etc.) injects the actual allocated port as SERVER_PORT — the container
+// must bind to that exact port, not an arbitrary internal one (confirmed live 2026-08-14: the app
+// was unreachable on Orihost's assigned port until this fallback was added, since only PORT was
+// ever checked). Falls back to PORT (used everywhere else, e.g. local dev/other hosts) then 3000.
+const PORT = Number(process.env.PORT ?? process.env.SERVER_PORT ?? 3000);
 const WEBHOOK_PUBLIC_KEY = process.env.ERLC_WEBHOOK_PUBLIC_KEY;
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID;

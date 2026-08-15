@@ -2,6 +2,51 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (actually deployed) — Bot is live on Orihost (Pterodactyl), off the dev machine for real
+
+The cleanup pass earlier today turned out to be timely — deployed to Orihost (free Pterodactyl
+hosting) the same day. Real deploy, not a dry run: confirmed externally reachable at
+`176.100.37.91:30172/health`, local dev instance stopped, local Cloudflare tunnel stopped.
+
+**Real problems hit and fixed, in order**:
+1. No shell/console on this host — deployed via SFTP instead (`de-vip-01.orihost.com:2022`).
+   Built `dist/` + a Linux-x64-targeted `node_modules` locally first (turned out unnecessary — see
+   #2 — but confirmed zero native binaries during the process, useful to know regardless).
+2. Their Node egg auto-runs `npm install` on boot if `package.json` exists at the root — the panel
+   skips uploading `node_modules` entirely and reinstalls fresh, on the real target platform. More
+   reliable than my manual cross-platform build attempt.
+3. Their file manager's "Unarchive" wrapped the uploaded zip's contents in a subfolder named after
+   the archive, instead of extracting flat — `dist/index.js` ended up at
+   `delta-city-dispatch-orihost/dist/index.js`, not `/home/container/dist/index.js` where their
+   fixed startup script expects it. Cost one real crash-loop cycle (`Cannot find module`) before
+   catching it via SFTP `ls`. Fixed by moving every uploaded item up one directory level.
+4. **The app was listening on port 3000 internally while Orihost exposed it externally on 30172**
+   — Pterodactyl doesn't remap ports, the app has to bind the exact allocated one. `index.ts` now
+   checks `SERVER_PORT` (Pterodactyl's standard variable) as a fallback if `PORT` isn't set;
+   `PORT=30172` was also set explicitly in the remote `.env` since it's not confirmed Orihost
+   actually injects `SERVER_PORT`. Confirmed externally reachable after this fix, not before.
+
+**What's confirmed working on Orihost**: Postgres connection, both `/internal/*` routes, Discord
+login + slash command registration, every poller (duty tracker, compliance monitor, calls
+dispatch, join-reminder, roleplay-hints, mod-call detector, cad-reminder).
+
+**What's NOT working yet, both understood and non-blocking**:
+- **Voice/Piper TTS** — `voice/setup.sh` never ran (no console to run it on). Confirmed this
+  doesn't crash anything (`[process] uncaught exception (kept running) ... spawn .../python3
+  ENOENT` — caught by the existing safety net from way earlier this project), just means spoken
+  announcements silently no-op on this host for now.
+- **No HTTPS** — plain `http://176.100.37.91:30172`, no domain on the free tier. Fine for the
+  CAD's server-to-server calls; unconfirmed whether ER:LC's webhook dashboard will accept a
+  non-HTTPS URL for the game-side webhook.
+- **ER:LC's IP allowlist is stale** — still allowlisted for the dev machine's old IP, not
+  Orihost's. Every `:h`/PA/force-respawn call will keep 403ing until this is updated.
+- **No auto-deploy** — `GIT_ADDRESS` et al. aren't set, so future code changes need manual SFTP
+  re-sync. Could switch to git-based auto-deploy later (this repo already has a real GitHub
+  remote) by setting those variables + `AUTO_UPDATE=1`.
+
+Told the CAD session about the new address via COORDINATION.md — `BOT_INTERNAL_API_URL` needs to
+point at `http://176.100.37.91:30172/internal/announce` now.
+
 ## 2026-08-14 (cleanup for a smaller host) — Trimmed disk footprint, switched deploy to a compiled build
 
 User wants to actually deploy on a smaller/cheaper host once one exists, so this pass was about
