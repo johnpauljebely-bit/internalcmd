@@ -2,6 +2,76 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (media relay) — !media command reposts an attached image to a fixed channel
+
+New: any role-`1535866581853413376` holder, in any channel, typing exactly "!media" with an image
+attached gets it reposted (camera emoji + their mention, via `buildMediaRelayEmbed` in
+`sessionEmbeds.ts`) to channel `1535866584881438832`.
+
+**Real architectural first**: this bot has never needed to read regular Discord chat message
+content before — every existing feature is either a slash command/button (`interactionCreate`) or
+in-game chat routed through the ER:LC webhook, neither of which touch Discord's own message
+content. Added a real `messageCreate` listener plus the `GuildMessages`/`MessageContent` gateway
+intents. `MessageContent` is Discord's own privileged intent — has to be manually enabled in the
+Developer Portal per-application, not just requested in code, or `message.content` comes through
+empty and this silently never fires. Flagged clearly in NEEDS_HUMAN_VERIFICATION.md since this is
+exactly the kind of failure mode that looks like a bug but isn't.
+
+Doesn't delete the original `!media` message — not asked for, and deleting things unprompted
+seemed like the wrong default for a first pass. Picks the first image-content-type attachment if
+multiple are sent (spec said "an attached image," singular).
+
+tsc clean, 57/57 tests passing.
+
+## 2026-08-14 (session system) — Built the full session panel/vote/shutdown flow from a precise spec
+
+User provided exact Discord Components V2 JSON for six different panels — built all of them using
+discord.js's actual builder classes (`ContainerBuilder`, `SectionBuilder`, `MediaGalleryBuilder`,
+etc., confirmed available in the installed discord.js 14.27.0) rather than hand-rolling raw
+objects, so they typecheck against discord.js's own overloads with no casts needed.
+
+**New files**: `src/sessionEmbeds.ts` (all 6 embed builders — panel, vote, start-up, full-capacity,
+shutdown-notification, verification log), `src/commands/session.ts` (3 slash commands, button
+routing, the 15s poller, the shutdown sequence).
+
+**What's live**:
+- `/sessionpanel` — posts the live panel, updates every 15s with real ER:LC player/staff/queue
+  counts.
+- `/sessionstart` — posts the vote panel (`@here` + role ping), "Cast Vote"/"List Current Voters"
+  buttons. At 10 votes, auto-deletes the vote message and posts the Session Start-up panel tagging
+  every voter.
+- Full-capacity watcher (same 15s loop) — posts "Thank You, Delta!" once, when
+  `currentPlayers >= maxPlayers` and a session is active.
+- `/sessiondown` — the full ~95s sequence: PA warning → wait 60s → PA warning → wait 30s → kick
+  every online player → purge the session channel (keeping only the tracked panel message) → post
+  the shutdown notification panel with a role-toggle button.
+- Verification (`;verify`) now logs the detailed rundown embed instead of one plain-text line —
+  role assignment/DM/Discord-fetch/Roblox-fetch tracked individually and shown as ■/□.
+
+**Real architecture note**: `commands/session.ts` imports `getGuild` from `discordBot.ts`, and
+`discordBot.ts` imports the command/button handlers back from `commands/session.ts` — a genuine
+circular import, but confirmed safe because it already exists elsewhere in this codebase
+(`bolo.ts` ↔ `discordBot.ts`, same pattern) and only resolves inside function bodies at runtime,
+never at module-load time.
+
+**Real decisions made without asking, flagged here rather than silently**:
+- The vote panel's queue-stat button label said "Staff" in the user's own spec (copy-paste
+  artifact, appeared for both the Staff AND Queue rows) — used "Queue" for that one instead.
+- `/sessionpanel`'s permission tier wasn't specified — reused the same "Management Team or higher"
+  tier given for `/sessionstart`/`/sessiondown`, since it's the same admin surface.
+- The shutdown notification's "Session Notification" button toggles the session-ping role on the
+  clicker (add if missing, remove if held) — the spec described the button existing and what the
+  surrounding text promised ("you'll be notified next time") but not the exact click behavior.
+
+**Everything unconfirmed** (kick command syntax, staff-permission-string heuristic, queue field
+name, verification role IDs, expiring CDN image URLs) is in NEEDS_HUMAN_VERIFICATION.md — none of
+it blocks the rest of the feature from working, each degrades gracefully (kick failing is logged
+not thrown, missing role IDs just skip that one rundown line, etc.).
+
+tsc clean, 57/57 tests passing (no new tests — this is Discord-interaction-heavy code in the same
+vein as every other slash command in this codebase, none of which are unit-tested either; the
+pure logic that IS unit-testable, like formatEmergencyCodesForSpeech, already is).
+
 ## 2026-08-14 (actually deployed) — Bot is live on Orihost (Pterodactyl), off the dev machine for real
 
 The cleanup pass earlier today turned out to be timely — deployed to Orihost (free Pterodactyl

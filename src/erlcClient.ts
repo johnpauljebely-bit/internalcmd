@@ -1,4 +1,4 @@
-import { RELOAD_COMMAND_TEMPLATE, PM_COMMAND_TEMPLATE } from "./config.js";
+import { RELOAD_COMMAND_TEMPLATE, PM_COMMAND_TEMPLATE, KICK_COMMAND_TEMPLATE } from "./config.js";
 
 const BASE_URL = "https://api.erlc.gg/v2";
 
@@ -49,6 +49,46 @@ export async function getServerPlayers(): Promise<ErlcPlayer[] | null> {
     return Array.isArray(data) ? data : (data.Players ?? []);
   } catch (err) {
     console.error("[erlc] GET /server?Players=true errored", err);
+    return null;
+  }
+}
+
+// For the session panel's live player-count/queue display. Confirmed live 2026-08-11 (see
+// getCommandLogs's comment for the same base-response check): CurrentPlayers/MaxPlayers/Name/
+// JoinKey are always present at the top level of /server regardless of which query flag is used,
+// alongside whatever array that flag requested. Queue count is UNCONFIRMED — no queue field has
+// ever been observed in a real response (server has always been empty when checked), so this
+// checks a couple of plausible field names defensively and falls back to null rather than
+// guessing a specific one is definitely right.
+export interface ErlcServerInfo {
+  currentPlayers: number;
+  maxPlayers: number;
+  queue: number | null;
+  players: ErlcPlayer[];
+}
+
+export async function getServerInfo(): Promise<ErlcServerInfo | null> {
+  try {
+    const res = await erlcFetch("/server?Players=true", { method: "GET" });
+    if (!res.ok) {
+      console.error(`[erlc] GET /server?Players=true (info) failed: ${res.status}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      CurrentPlayers?: number;
+      MaxPlayers?: number;
+      Queue?: number;
+      CurrentQueue?: number;
+      Players?: ErlcPlayer[];
+    };
+    return {
+      currentPlayers: data.CurrentPlayers ?? data.Players?.length ?? 0,
+      maxPlayers: data.MaxPlayers ?? 0,
+      queue: data.Queue ?? data.CurrentQueue ?? null,
+      players: data.Players ?? [],
+    };
+  } catch (err) {
+    console.error("[erlc] GET /server?Players=true (info) errored", err);
     return null;
   }
 }
@@ -142,5 +182,11 @@ export async function forceRespawn(username: string): Promise<boolean> {
 
 export async function sendPrivateMessage(username: string, message: string): Promise<boolean> {
   const command = PM_COMMAND_TEMPLATE.replace("{username}", username).replace("{message}", message);
+  return sendServerCommand(command);
+}
+
+// For /sessiondown's shutdown sequence — kicks (not force-respawns) a specific player.
+export async function kickPlayer(username: string): Promise<boolean> {
+  const command = KICK_COMMAND_TEMPLATE.replace("{username}", username);
   return sendServerCommand(command);
 }

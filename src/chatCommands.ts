@@ -1,4 +1,11 @@
-import { getGuild, announceToRTO, dmUser, logToServerManagement } from "./discordBot.js";
+import {
+  getGuild,
+  announceToRTO,
+  dmUser,
+  logToServerManagement,
+  logPayloadToServerManagement,
+  fetchDiscordUsername,
+} from "./discordBot.js";
 import { firstEmptyChannel, moveMemberToChannel } from "./voiceMove.js";
 import { consumeVerifyCode, findLinkByRobloxUserId, getCallsignsByDiscordId, type LinkRow } from "./db.js";
 import { getServerPlayers, sendPrivateMessage, type ErlcPlayer } from "./erlcClient.js";
@@ -11,12 +18,16 @@ import {
   DRAG_COMMAND_COOLDOWN_MS,
   PROXIMITY_STUDS,
   STAFF_WAITING_ROOM_VC_ID,
+  COMMUNITY_MEMBER_ROLE_ID,
+  VERIFIED_ROLE_ID,
+  UNVERIFIED_ROLE_ID,
 } from "./config.js";
 import type { ChatEvent } from "./parseEvent.js";
 import { isOnCooldown } from "./cooldown.js";
 import { distance2D } from "./distance.js";
 import { isSergeantOrAbove } from "./rankHierarchy.js";
 import { matchPlayersByPartialUsername } from "./matchPlayer.js";
+import { buildVerificationLogEmbed } from "./sessionEmbeds.js";
 
 const lastDragCommandAt = new Map<string, number>();
 
@@ -58,16 +69,57 @@ async function nearbyLinkedDiscordIds(senderRobloxId: string): Promise<string[]>
   return discordIds;
 }
 
+// UNCONFIRMED — role IDs were never given for this (see config.ts). Returns false (not done)
+// whenever any of the three aren't configured, rather than guessing IDs and risking assigning the
+// wrong roles to a real member. Once real IDs are set, this actually does the assignment.
+async function assignVerificationRoles(discordId: string): Promise<boolean> {
+  if (!COMMUNITY_MEMBER_ROLE_ID || !VERIFIED_ROLE_ID || !UNVERIFIED_ROLE_ID) {
+    console.warn("[verify] role assignment skipped — COMMUNITY_MEMBER_ROLE_ID/VERIFIED_ROLE_ID/UNVERIFIED_ROLE_ID not configured");
+    return false;
+  }
+  try {
+    const guild = await getGuild();
+    const member = await guild.members.fetch(discordId);
+    await member.roles.add([COMMUNITY_MEMBER_ROLE_ID, VERIFIED_ROLE_ID]);
+    await member.roles.remove(UNVERIFIED_ROLE_ID);
+    return true;
+  } catch (err) {
+    console.error(`[verify] role assignment failed for discord=${discordId}`, err);
+    return false;
+  }
+}
+
 async function handleVerify(event: ChatEvent) {
   const code = event.argument.trim();
   const result = await consumeVerifyCode(code, event.robloxUserId);
   if (result.ok) {
     console.log(`[verify] linked discord=${result.discordId} roblox=${result.robloxUsername}`);
-    await dmUser(
-      result.discordId,
-      `Verification success — your Discord is now linked to Roblox user **${result.robloxUsername}**.`,
+
+    const [roleAssignment, directMessage, discordUsername] = await Promise.all([
+      assignVerificationRoles(result.discordId),
+      dmUser(
+        result.discordId,
+        `Verification success — your Discord is now linked to Roblox user **${result.robloxUsername}**.`,
+      ),
+      fetchDiscordUsername(result.discordId),
+    ]);
+
+    await logPayloadToServerManagement(
+      buildVerificationLogEmbed({
+        code,
+        discordId: result.discordId,
+        discordUsername: discordUsername ?? "unknown",
+        robloxUsername: result.robloxUsername,
+        robloxUserId: result.robloxUserId,
+        rundown: {
+          roleAssignment,
+          directMessage,
+          discordInfoFetch: discordUsername !== null,
+          robloxInfoFetch: true,
+        },
+        verifiedAtUnixSeconds: Math.floor(Date.now() / 1000),
+      }),
     );
-    await logToServerManagement(`Verified: <@${result.discordId}> ↔ Roblox \`${result.robloxUsername}\``);
   } else {
     console.warn(`[verify] failed for roblox_id=${event.robloxUserId} code=${code}: ${result.reason}`);
     await logToServerManagement(

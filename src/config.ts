@@ -165,6 +165,51 @@ export const ROLEPLAY_HINT_INTERVAL_MS = 7 * 60_000;
 export const CAD_REMINDER_INTERVAL_MS = 2 * 60_000;
 export const CAD_ACTIVITY_STALE_MS = 3 * 60_000;
 
+// Session system (user ask, 2026-08-14) — the channel every session panel/vote/start-up embed
+// gets posted to, and the role pinged for session votes + subscribed to via the shutdown
+// notification button.
+export const SESSION_CHANNEL_ID = "1535866584604872775";
+export const SESSION_PING_ROLE_ID = "1535866581761138805";
+
+// "Management Team or higher" for /sessionstart and /sessiondown — reuses DISPATCH_ADMIN_ROLE_IDS'
+// existing ordering (Community Directive down to Manager) sliced at Management Team, since that
+// list already encodes this exact hierarchy. /sessionpanel uses the same tier — no separate role
+// was specified for it, and it's thematically the same admin surface.
+export const SESSION_ADMIN_ROLE_IDS = DISPATCH_ADMIN_ROLE_IDS.slice(0, 6);
+
+export const SESSION_JOIN_CODE = "playdelta";
+export const SESSION_SERVER_OWNER = "clearly_jp";
+
+// UNCONFIRMED — these are Discord CDN attachment URLs with signed, EXPIRING query params
+// (`ex=`/`is=`/`hm=`). They'll work today but the signature will eventually expire and the images
+// will stop loading — flagged in NEEDS_HUMAN_VERIFICATION.md. Re-upload as permanent bot-hosted
+// assets (or re-fetch fresh URLs) once that happens.
+export const SESSION_BANNER_URL =
+  "https://media.discordapp.net/attachments/1535866584290304072/1538028240994836491/Copy_of_Banners_2.png?ex=6a812feb&is=6a7fde6b&hm=826a9d2375a35d50219f4373a5c19fc839613e22e44ae39ecd9dcc73bfabdf37&=&format=webp&quality=lossless&width=1024&height=307";
+export const SESSION_FOOTER_IMAGE_URL =
+  "https://media.discordapp.net/attachments/1535866584290304072/1538028078473937017/image.png?ex=6a812fc5&is=6a7fde45&hm=b3a07fcecf5134089cfb9727979d58af426ddaebc55d3f54fd64886a17d8690b&=&format=webp&quality=lossless";
+
+export const SESSION_VOTE_THRESHOLD = 10;
+export const SESSION_PANEL_UPDATE_INTERVAL_MS = 15_000;
+
+// !media relay (user ask, 2026-08-14) — anyone holding this role, in any channel, posting "!media"
+// with an attached image gets it reposted (with a camera emoji + their mention) to this channel.
+export const MEDIA_RELAY_ROLE_ID = "1535866581853413376";
+export const MEDIA_RELAY_CHANNEL_ID = "1535866584881438832";
+export const MEDIA_RELAY_EMOJI = "<:camera:1538036373959741561>";
+
+// UNCONFIRMED — no kick command has ever been confirmed live, same class of guess as
+// RELOAD_COMMAND_TEMPLATE/PM_COMMAND_TEMPLATE below. Used by /sessiondown's shutdown sequence.
+export const KICK_COMMAND_TEMPLATE = process.env.ERLC_KICK_COMMAND_TEMPLATE ?? ":kick {username}";
+
+// UNCONFIRMED — role assignment on verification (Community Member + Verified, remove Unverified)
+// was asked for but no real role IDs were given. Left unset on purpose (not guessed) so the
+// verification embed's "Role assignment" rundown line honestly reports □ (not done) instead of
+// silently assigning wrong roles to real members. Set these once the real IDs are known.
+export const COMMUNITY_MEMBER_ROLE_ID = process.env.COMMUNITY_MEMBER_ROLE_ID;
+export const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
+export const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE_ID;
+
 // Deduped across RCMP + BCHP + Ownership for the /callsign assign rank dropdown — actual validity
 // per department is still checked against CALLSIGN_RANGES when the command runs (this is why
 // picking "Ownership" as the rank under RCMP/BCHP correctly gets rejected — that combination

@@ -4,6 +4,47 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 ## Blocking / needs action
 
+- **!media relay needs the "Message Content Intent" enabled in the Discord Developer Portal —
+  likely not on by default.** This bot never needed to read regular chat message text before
+  (only slash commands/buttons, which don't need it); the new `!media` relay
+  (`src/mediaRelay.ts`) is the first feature that does. `GatewayIntentBits.MessageContent` is
+  requested in code, but Discord also requires it to be manually toggled ON for the bot's
+  application at https://discord.com/developers/applications → your app → Bot → "Message Content
+  Intent" — without that, `message.content` comes through empty and `!media` will never match,
+  silently. Check this before assuming the feature is broken if it doesn't respond.
+- **Session system (2026-08-14) — built end to end from a precise Discord Components V2 spec,
+  never tested live.** `/sessionpanel`, `/sessionstart`, `/sessiondown`, the vote/cast-vote/list-
+  voters flow, the full-capacity announcement, and the new verification log embed
+  (`src/sessionEmbeds.ts`, `src/commands/session.ts`, `chatCommands.ts`'s `handleVerify`). Several
+  genuinely unconfirmed pieces, all left as honest placeholders rather than guesses:
+  - **Kick command syntax (`ERLC_KICK_COMMAND_TEMPLATE`, default `:kick {username}`)** — same
+    class of guess as the existing reload/PM templates, never confirmed live. Used by
+    `/sessiondown`'s "kick everyone" step.
+  - **"Staff" player count on the panel** — counts anyone whose ER:LC `Permission` field isn't the
+    literal string `"Normal"` as staff. Never checked against a real online moderator; the actual
+    set of Permission strings ER:LC uses is a guess.
+  - **Server queue count** — checks for a `Queue`/`CurrentQueue` field on `/server`'s response;
+    neither has ever been observed (server's been empty every time it's been checked). Panel shows
+    `?` if neither is present rather than a possibly-wrong 0.
+  - **Verification role assignment** — `COMMUNITY_MEMBER_ROLE_ID`/`VERIFIED_ROLE_ID`/
+    `UNVERIFIED_ROLE_ID` are unset (no real IDs were given). The verification embed's "Role
+    assignment" rundown line will show □ (not done) until these are set in `.env` — verification
+    itself (the actual account linking) still works fine either way, this only gates the
+    additional role-swap step.
+  - **Banner/footer images use Discord CDN attachment URLs with signed, expiring query params**
+    (`ex=`/`is=`/`hm=`) — they'll work today but the signature will eventually expire and every
+    session embed's images will stop loading. Re-upload as permanent assets before that happens.
+  - **"Management Team or higher" role tier** — reused the existing `DISPATCH_ADMIN_ROLE_IDS`
+    ordering (Community Directive through Management Team) for both `/sessionstart`/`/sessiondown`
+    (explicitly named `1535866581874376763`) and `/sessionpanel` (no role was specified for this
+    one — assumed the same tier since it's the same admin surface; confirm that's actually wanted).
+  - **Channel purge on `/sessiondown`** uses `bulkDelete` (only works under 14 days old, 100 at a
+    time) with a fallback to individual deletes for anything older — untested against a channel
+    with real message history/volume.
+  - **The whole `/sessiondown` sequence is ~95 seconds end to end** (60s wait + 30s wait + kicking
+    everyone + purging + posting) and was never run against a real server with real players online
+    — confirm it doesn't feel broken/stuck given how long it silently runs after the initial
+    ephemeral ack.
 - **Bot moved off the dev machine entirely (2026-08-14) — now hosted on Orihost (Pterodactyl,
   free tier).** Real infrastructure change: no longer `npx tsx` + a Cloudflare tunnel on the dev
   Mac — that tunnel is stopped, that whole approach is dead. Live at `176.100.37.91:30172`,

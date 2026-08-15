@@ -5,17 +5,46 @@ import { callsignCommand, handleCallsignCommand } from "./commands/callsign.js";
 import { mylinkCommand, handleMylinkCommand } from "./commands/mylink.js";
 import { boloCommand, handleBoloCommand } from "./commands/bolo.js";
 import { dispatchCommand, handleDispatchCommand } from "./commands/dispatch.js";
+import {
+  sessionPanelCommand,
+  sessionStartCommand,
+  sessionDownCommand,
+  handleSessionPanelCommand,
+  handleSessionStartCommand,
+  handleSessionDownCommand,
+  isSessionButtonCustomId,
+  handleSessionButtonInteraction,
+} from "./commands/session.js";
+import { handleMediaRelayMessage } from "./mediaRelay.js";
 import { containerMessage } from "./ui.js";
 
+// GuildMessages + MessageContent added 2026-08-14 for the !media relay — MessageContent is a
+// privileged intent that also needs to be manually enabled in the Discord Developer Portal for
+// this bot's application, or message.content will come through empty even with this bit set.
+// Flagged in NEEDS_HUMAN_VERIFICATION.md.
 export const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
+
+client.on("messageCreate", (message) => {
+  handleMediaRelayMessage(message).catch((err) => console.error("[media-relay] handler errored", err));
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+  if (interaction.isButton() && !isSessionButtonCustomId(interaction.customId)) return;
+
+  const label = interaction.isChatInputCommand() ? interaction.commandName : interaction.customId;
 
   try {
-    if (interaction.commandName === "link") {
+    if (interaction.isButton()) {
+      await handleSessionButtonInteraction(interaction);
+    } else if (interaction.commandName === "link") {
       await handleLinkCommand(interaction);
     } else if (interaction.commandName === "callsign") {
       await handleCallsignCommand(interaction);
@@ -25,9 +54,15 @@ client.on("interactionCreate", async (interaction) => {
       await handleBoloCommand(interaction);
     } else if (interaction.commandName === "dispatch") {
       await handleDispatchCommand(interaction);
+    } else if (interaction.commandName === "sessionpanel") {
+      await handleSessionPanelCommand(interaction);
+    } else if (interaction.commandName === "sessionstart") {
+      await handleSessionStartCommand(interaction);
+    } else if (interaction.commandName === "sessiondown") {
+      await handleSessionDownCommand(interaction);
     }
   } catch (err) {
-    console.error(`[discord] command "${interaction.commandName}" errored`, err);
+    console.error(`[discord] interaction "${label}" errored`, err);
     // Never let a failed error-recovery attempt itself crash the process (confirmed this
     // happened for real: a slow command missed Discord's 3s ACK window, the interaction expired,
     // and this fallback's own reply() call threw "Unknown interaction" as an unhandled
@@ -40,7 +75,7 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply(reply);
       }
     } catch (replyErr) {
-      console.error(`[discord] failed to report the error back to the user for "${interaction.commandName}"`, replyErr);
+      console.error(`[discord] failed to report the error back to the user for "${label}"`, replyErr);
     }
   }
 });
@@ -64,9 +99,15 @@ export async function registerCommands(token: string, applicationId: string) {
       mylinkCommand.toJSON(),
       boloCommand.toJSON(),
       dispatchCommand.toJSON(),
+      sessionPanelCommand.toJSON(),
+      sessionStartCommand.toJSON(),
+      sessionDownCommand.toJSON(),
     ],
   });
-  console.log("[discord] registered guild slash commands: /link, /callsign, /mylink, /bolo, /dispatch");
+  console.log(
+    "[discord] registered guild slash commands: /link, /callsign, /mylink, /bolo, /dispatch, " +
+      "/sessionpanel, /sessionstart, /sessiondown",
+  );
 }
 
 export async function startBot(token: string, applicationId: string) {
@@ -80,13 +121,19 @@ export async function getGuild() {
 }
 
 async function sendToChannel(channelId: string, message: string) {
+  await sendPayloadToChannel(channelId, containerMessage(message));
+}
+
+// Generalized version of sendToChannel for callers with a fully custom Components V2 payload
+// (e.g. the verification log embed) rather than a plain text message.
+async function sendPayloadToChannel(channelId: string, payload: unknown) {
   const guild = await getGuild();
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel || !channel.isSendable()) {
     console.error(`[discord] channel ${channelId} is not text-capable, cannot send`);
     return;
   }
-  await channel.send(containerMessage(message));
+  await channel.send(payload as never);
 }
 
 export async function announceToRTO(message: string) {
@@ -97,11 +144,31 @@ export async function logToServerManagement(message: string) {
   await sendToChannel(SERVER_MANAGEMENT_CHANNEL_ID, message);
 }
 
-export async function dmUser(discordId: string, message: string) {
+export async function logPayloadToServerManagement(payload: unknown) {
+  await sendPayloadToChannel(SERVER_MANAGEMENT_CHANNEL_ID, payload);
+}
+
+// Returns whether the DM actually sent — callers that need to know (e.g. the verification embed's
+// rundown checklist) can now tell success from failure instead of it being swallowed silently.
+export async function dmUser(discordId: string, message: string): Promise<boolean> {
   try {
     const user = await client.users.fetch(discordId);
     await user.send(containerMessage(message));
+    return true;
   } catch (err) {
     console.error(`[discord] failed to DM ${discordId}`, err);
+    return false;
+  }
+}
+
+// For the verification embed's "Discord Username" field — returns null if the fetch fails
+// (tracked in the embed's rundown as "Discord Info Fetch": □).
+export async function fetchDiscordUsername(discordId: string): Promise<string | null> {
+  try {
+    const user = await client.users.fetch(discordId);
+    return user.username;
+  } catch (err) {
+    console.error(`[discord] failed to fetch user ${discordId}`, err);
+    return null;
   }
 }

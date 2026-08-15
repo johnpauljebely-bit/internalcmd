@@ -12,6 +12,7 @@ import { startJoinReminder } from "./joinReminder.js";
 import { startRoleplayHints } from "./roleplayHints.js";
 import { startModCallDetector } from "./modCallDetector.js";
 import { startCadReminder } from "./cadReminder.js";
+import { startSessionPollers } from "./commands/session.js";
 import { warmUpTtsServer } from "./voice/ttsServer.js";
 import { initDb } from "./db.js";
 import { registerInternalApi } from "./internalApi.js";
@@ -90,6 +91,7 @@ async function main() {
   startRoleplayHints();
   startModCallDetector();
   startCadReminder();
+  startSessionPollers();
   warmUpTtsServer();
 
   app.listen(PORT, () => {
