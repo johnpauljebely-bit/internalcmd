@@ -1,7 +1,6 @@
 import { getServerCalls, type ErlcCall } from "./erlcClient.js";
 import { findNearestUnit } from "./nearestUnit.js";
 import { announceToRTO } from "./discordBot.js";
-import { announcePA } from "./erlcClient.js";
 import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { recordNewCall, markCallCleared, getActiveCalls, type CallRow } from "./db.js";
 import { formatForSpeech } from "./speechFormat.js";
@@ -66,16 +65,15 @@ async function announceNewCall(call: ErlcCall) {
 
   const textAnnouncement = `New call #${call.CallNumber ?? "?"}${call.Team ? ` (${call.Team})` : ""}: ${description}.${nearestLine}`;
 
-  // Spoken/PA phrasing per request: "all units be advised, active {crime} at postal {postal}."
+  // Spoken phrasing per request: "all units be advised, active {crime} at postal {postal}."
   // Case number appended so officers actually have something to reference when attaching by
   // case number later ("attach me to case #X") — id IS the case number (from CallNumber).
   const spokenAnnouncement = `all units be advised, active ${description} at postal ${formatForSpeech(postal)}, case number ${formatForSpeech(id)}.`;
 
-  await Promise.all([
-    announceToRTO(textAnnouncement),
-    announcePA(spokenAnnouncement),
-    announceToActiveDispatcher(spokenAnnouncement),
-  ]);
+  // 2026-08-14: dropped the ER:LC in-game :h PA leg — per explicit user request, dispatch/police
+  // radio traffic should stay on Discord (text + voice) only, since :h is visible to every player
+  // in the server including civilians.
+  await Promise.all([announceToRTO(textAnnouncement), announceToActiveDispatcher(spokenAnnouncement)]);
 }
 
 // Officers attach to a call by describing it in speech (e.g. "attach to the robbery") — matches
@@ -114,8 +112,8 @@ export async function findActiveCallByPostal(postal: string): Promise<CallRow | 
 // never been confirmed to even exist as a webhook event (see NEEDS_HUMAN_VERIFICATION.md), so
 // waiting on that to eventually arrive isn't a real fix — this works regardless of whether ER:LC
 // ever sends one. source='leo' distinguishes it from ER:LC-sourced ('erlc_native') and
-// CAD-originated ('caller') calls. Broadcasts to RTO text + in-game PA, same as a normal new-call
-// announcement — deliberately NOT also spoken through the voice dispatcher here, since the caller
+// CAD-originated ('caller') calls. Broadcasts to RTO text only (no in-game PA — see 2026-08-14
+// note above) — deliberately NOT also spoken through the voice dispatcher here, since the caller
 // is that same voice session and is about to hear a direct response; speaking both back-to-back on
 // the same audio player would collide/cut off.
 export async function declareCallFromVoice(description: string, postal: string, reportedByDiscordId: string): Promise<CallRow> {
@@ -134,10 +132,7 @@ export async function declareCallFromVoice(description: string, postal: string, 
   const type = /\bpanic\b/i.test(description) ? "panic" : null;
   await recordNewCall(id, description, null, postal, "leo", type);
 
-  await Promise.all([
-    announceToRTO(`New call #${id} (reported by <@${reportedByDiscordId}>): ${description} at postal ${postal}.`),
-    announcePA(`all units be advised, active ${description} at postal ${formatForSpeech(postal)}, case number ${formatForSpeech(id)}.`),
-  ]);
+  await announceToRTO(`New call #${id} (reported by <@${reportedByDiscordId}>): ${description} at postal ${postal}.`);
 
   return { id, description, team: null, postal, created_at: new Date().toISOString(), cleared_at: null };
 }
@@ -159,12 +154,11 @@ export function startCallDispatch() {
       for (const id of knownCallIds) {
         if (!currentIds.has(id)) {
           await markCallCleared(id);
-          // Same three channels as a new-call announcement, for consistency — text/PA keep the
-          // literal case number since those are read, not heard; voice gets it spoken digit-by-
+          // Same two channels as a new-call announcement, for consistency — text keeps the
+          // literal case number since that's read, not heard; voice gets it spoken digit-by-
           // digit like every other spoken number in this pipeline.
           await Promise.all([
             announceToRTO(`Call cleared: #${id}`),
-            announcePA(`Call cleared, case number ${id}.`),
             announceToActiveDispatcher(`Call cleared, case number ${formatForSpeech(id)}.`),
           ]);
         }

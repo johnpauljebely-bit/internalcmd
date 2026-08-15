@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 import { timingSafeEqual } from "node:crypto";
-import { announcePA, sendPrivateMessage } from "./erlcClient.js";
+import { sendPrivateMessage } from "./erlcClient.js";
 import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { formatEmergencyCodesForSpeech } from "./speechFormat.js";
 import { findLinkByDiscordId } from "./db.js";
@@ -19,16 +19,22 @@ function secretsMatch(provided: string, expected: string): boolean {
 }
 
 // Per BOT_SIDE_INSTRUCTIONS.md #4 in delta-city-cad: the CAD website's civilian 911 quick-form
-// needs to trigger an in-game PA announcement, but the CAD has no ER:LC server key of its own —
-// per the project brief, this bot owns the ER:LC integration exclusively. This is a thin,
-// authenticated wrapper around the existing announcePA(), not a new integration surface.
+// (and, as of the panic button, officer panic alerts too) needs to reach dispatch, but the CAD has
+// no ER:LC server key of its own — per the project brief, this bot owns the ER:LC integration
+// exclusively. This is a thin, authenticated wrapper around the bot's own broadcast channels.
 //
-// 2026-08-11 (BOT_SIDE_INSTRUCTIONS.md #8): also speaks through the voice dispatcher if one's
-// active, not just ER:LC's in-game PA — same "both channels, always" pattern already established
-// for every other announcement in this codebase (BOLO, pursuit, new-call, call-cleared). No flag
-// to pick one or the other; keeping this endpoint's behavior uniform rather than adding a special
-// case for CAD-originated messages specifically. speakToActiveDispatcher no-ops (returns false)
-// if no voice session is enabled, so this is always safe to call.
+// 2026-08-11 (BOT_SIDE_INSTRUCTIONS.md #8): speaks through the voice dispatcher if one's active,
+// not just posting text — same "both channels, always" pattern already established for every
+// other announcement in this codebase (BOLO, pursuit, new-call, call-cleared). No flag to pick one
+// or the other. announceToActiveDispatcher no-ops (returns false) if no voice session is enabled,
+// so this is always safe to call.
+//
+// 2026-08-14: dropped ER:LC's in-game :h PA leg entirely — per explicit user request, dispatch/
+// police radio traffic (which this endpoint carries just as much as the other broadcast call
+// sites do — the CAD panic button routes through here too, not just civilian 911 reports) should
+// stay on Discord only, since :h is visible to every player in the server including civilians.
+// This also happens to sidestep the standing ER:LC IP-allowlist 403 issue for this path, though
+// that wasn't the reason for the change.
 export function registerInternalApi(app: Express): void {
   const secret = process.env.INTERNAL_API_SECRET;
 
@@ -79,28 +85,26 @@ export function registerInternalApi(app: Express): void {
     console.log(`[internal-api] announcing: "${message.slice(0, 120)}"`);
 
     // Every other broadcast path in this codebase (new calls, cleared calls — see
-    // callDispatch.ts) always posts a text fallback to RTO_CHANNEL_ID alongside PA/voice, so a
-    // dispatcher always sees SOMETHING even when both of those fail. This endpoint (the CAD
-    // website's 911 quick-form) was the one place missing that fallback — with ER:LC's PA down
-    // (stale IP allowlist, already documented) and no active `/dispatch enable` voice session,
-    // CAD-originated calls had nowhere to land and silently vanished. Added 2026-08-14 after the
+    // callDispatch.ts) always posts a text fallback to RTO_CHANNEL_ID alongside voice, so a
+    // dispatcher always sees SOMETHING even when voice isn't active. This endpoint (CAD 911
+    // reports and panic alerts) was the one place missing that fallback, and had nowhere left to
+    // land at all once nobody had an active `/dispatch enable` session. Added 2026-08-14 after the
     // user reported CAD-side 911 calls weren't broadcasting at all.
     Promise.all([
-      announcePA(message),
       announceToActiveDispatcher(spokenMessage),
       announceToRTO(message).then(() => true).catch((err) => {
         console.error("[internal-api] RTO text fallback failed to post", err);
         return false;
       }),
     ])
-      .then(([sent, spoken, posted]) => {
-        console.log(`[internal-api] result: PA sent=${sent}, spoken=${spoken}, RTO posted=${posted}`);
-        // Success if ANY channel got the message through. Only report failure when all three
+      .then(([spoken, posted]) => {
+        console.log(`[internal-api] result: spoken=${spoken}, RTO posted=${posted}`);
+        // Success if EITHER channel got the message through. Only report failure when both
         // genuinely failed.
-        if (sent || spoken || posted) {
-          res.status(200).json({ ok: true, pa: sent, voice: spoken, rto: posted });
+        if (spoken || posted) {
+          res.status(200).json({ ok: true, voice: spoken, rto: posted });
         } else {
-          res.status(502).json({ ok: false, error: "announcement failed on PA, voice, and RTO text — check bot logs" });
+          res.status(502).json({ ok: false, error: "announcement failed on voice and RTO text — check bot logs" });
         }
       })
       .catch((err) => {

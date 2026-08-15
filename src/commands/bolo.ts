@@ -2,13 +2,12 @@ import { SlashCommandBuilder, MessageFlags, type ChatInputCommandInteraction } f
 import { findLinkByDiscordId } from "../db.js";
 import { containerMessage } from "../ui.js";
 import { announceToRTO } from "../discordBot.js";
-import { announcePA } from "../erlcClient.js";
 import { announceToActiveDispatcher } from "../voice/activeDispatcherRegistry.js";
 import { formatPlateForSpeech } from "../speechFormat.js";
 
 export const boloCommand = new SlashCommandBuilder()
   .setName("bolo")
-  .setDescription("Broadcast a BOLO to the RTO channel and in-game PA")
+  .setDescription("Broadcast a BOLO to the RTO channel and voice dispatcher")
   .addStringOption((opt) =>
     opt.setName("description").setDescription("What to look for / why").setRequired(true),
   )
@@ -40,16 +39,17 @@ export async function handleBoloCommand(interaction: ChatInputCommandInteraction
   const message = parts.join(" ");
 
   // The spoken version reads the plate with the NATO phonetic alphabet, per request — RTO text
-  // and in-game PA keep the literal plate since those are read, not heard.
+  // keeps the literal plate since that's read, not heard.
   const spokenParts = [`BOLO: ${description}.`];
   if (vehicle) spokenParts.push(`Vehicle: ${vehicle}.`);
   if (plate) spokenParts.push(`Plate: ${formatPlateForSpeech(plate)}.`);
   const spokenMessage = spokenParts.join(" ");
 
-  // Goes through Roblox's chat filter via virtual server management, same caveat as pursuit
-  // announcements — test the exact phrasing in-game before relying on it. Also spoken through
-  // the voice dispatcher if one's currently enabled (no-ops otherwise).
-  await Promise.all([announceToRTO(message), announcePA(message), announceToActiveDispatcher(spokenMessage)]);
+  // 2026-08-14: no longer sent through ER:LC's in-game :h PA — dispatch/police radio traffic
+  // stays on Discord (text + voice) only now, per explicit user request; :h is visible to every
+  // player in the server including civilians. Also spoken through the voice dispatcher if one's
+  // currently enabled (no-ops otherwise).
+  await Promise.all([announceToRTO(message), announceToActiveDispatcher(spokenMessage)]);
 
   await interaction.editReply(containerMessage("BOLO broadcast sent."));
 }

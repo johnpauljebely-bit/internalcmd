@@ -1,5 +1,5 @@
 import { announceToRTO } from "./discordBot.js";
-import { getServerPlayers, announcePA } from "./erlcClient.js";
+import { getServerPlayers } from "./erlcClient.js";
 import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { findLinkByRobloxUserId, getCallsignsByDiscordId } from "./db.js";
 import { formatForSpeech } from "./speechFormat.js";
@@ -35,14 +35,19 @@ async function currentCallsignAndPostal(robloxUserId: string): Promise<{ callsig
   };
 }
 
-// Same wording spoken and posted/PA'd, except callsign/postal get NATO-digit speech formatting
-// for the voice channel only (confirmed live elsewhere this session: Piper reads a whole number
-// like "1247" as "twelve forty-seven," not digit-by-digit — text/PA stay literal since those are
-// read, not heard).
+// Same wording posted and spoken, except callsign/postal get NATO-digit speech formatting for the
+// voice channel only (confirmed live elsewhere this session: Piper reads a whole number like
+// "1247" as "twelve forty-seven," not digit-by-digit — text stays literal since that's read, not
+// heard).
+//
+// 2026-08-14: no longer sent through ER:LC's in-game :h PA — per explicit user request, dispatch/
+// police radio traffic (pursuits, calls, BOLOs, panics) should stay on Discord (text + voice) only,
+// since :h broadcasts to every player in the server including civilians. Only genuinely
+// server-wide messages (session start/shutdown, in commands/session.ts) still use PA.
 async function announceEverywhere(build: (fmt: (v: string) => string) => string) {
-  const textAndPa = build((v) => v);
+  const text = build((v) => v);
   const spoken = build(formatForSpeech);
-  await Promise.all([announceToRTO(textAndPa), announcePA(textAndPa), announceToActiveDispatcher(spoken)]);
+  await Promise.all([announceToRTO(text), announceToActiveDispatcher(spoken)]);
 }
 
 export async function startPursuit(officerRobloxId: string, vehicleDescription: string) {
