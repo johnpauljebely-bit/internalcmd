@@ -18,6 +18,7 @@ import {
   MEDIA_RELAY_EMOJI,
   WELCOME_MEMBERCOUNT_EMOJI,
   WELCOME_DASHBOARD_URL,
+  DASHBOARD_BANNER_URL,
 } from "./config.js";
 
 function bannerGallery(): MediaGalleryBuilder {
@@ -50,8 +51,11 @@ interface ComponentsV2Payload {
   components: TopLevelComponent[];
 }
 
-function payload(components: TopLevelComponent[]): ComponentsV2Payload {
-  return { flags: MessageFlags.IsComponentsV2, components };
+function payload(components: TopLevelComponent[], ephemeral = false): ComponentsV2Payload {
+  return {
+    flags: ephemeral ? MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral : MessageFlags.IsComponentsV2,
+    components,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -322,4 +326,133 @@ export function buildWelcomeMessage(newMemberId: string, memberCount: number) {
   );
 
   return payload([textDisplay, buttons]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 9. !dashboard — the community rules hub. Two Section rows (Discord/Roblox) with button
+// accessories; clicking either replies with the matching ephemeral rules panel.
+// ---------------------------------------------------------------------------------------------
+export function buildDashboardPanel() {
+  // Both sections use identical body text in the user's own spec (only the button labels differ,
+  // "Discord" vs "Roblox") — kept exactly as given rather than assuming it's a copy-paste mistake
+  // the way the earlier Queue-button "Staff" label clearly was; here the text is generic enough
+  // that duplicating it plausibly IS intentional.
+  const sectionText = "**Discord Guidelines**\n-# Rules to follow for **everyone** in our community";
+
+  const container = new ContainerBuilder()
+    .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(DASHBOARD_BANNER_URL)))
+    .addSeparatorComponents(sep(2))
+    .addTextDisplayComponents(
+      text(
+        "# Delta Roleplay Community\n> Joining this server means you're accepting every rule " +
+          "outlined below, plus the common-sense clause for situations these rules don't directly " +
+          "address. **Moderation action can be taken by staff at their discretion, at any time.**",
+      ),
+    )
+    .addSeparatorComponents(sep(2))
+    .addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(text(sectionText))
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId("dashboard_discord_rules").setLabel("Discord").setStyle(ButtonStyle.Secondary),
+        ),
+    )
+    .addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(text(sectionText))
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId("dashboard_roblox_rules").setLabel("Roblox").setStyle(ButtonStyle.Secondary),
+        ),
+    )
+    .addSeparatorComponents(sep(2, true))
+    .addMediaGalleryComponents(footerGallery());
+
+  return payload([container]);
+}
+
+export function buildDiscordRulesEmbed() {
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(
+      text(
+        "# Delta Roleplay — Discord Server Rules\n\n" +
+          "### 1. Nickname & Callsign Format\n" +
+          "- On-duty department members must set their nickname to: `Callsign | ROBLOX Username` (e.g. `104 | ExampleUser`)\n" +
+          "- Do not display a rank, callsign, or department tag you have not actually earned or been assigned.\n\n" +
+          "### 2. Voice Chat Requirement\n" +
+          "- This server operates on a VC-required basis for roleplay.\n" +
+          "- If you're actively involved in a scene, you must be connected to the correct voice channel with your microphone working.\n" +
+          "- Sitting muted or deafened to dodge communication during roleplay is not allowed.\n\n" +
+          "### 3. Respect & Conduct\n" +
+          "- Treat every member — regardless of rank — with basic respect.\n" +
+          "- Staff instructions should be followed; if you disagree, take it to a ticket rather than arguing in chat.\n" +
+          "- Harassment, deliberate provocation (\"baiting\"), and public drama/hostility are not tolerated.\n\n" +
+          "### 4. Prohibited Content\n" +
+          "- No pornographic, sexual, nude, or graphically violent material of any kind.\n" +
+          "- This covers images, GIFs, audio clips, custom emojis, decals, avatars, and shared links.\n\n" +
+          "### 5. Mentions & Pings\n" +
+          "- Don't ping High Ranks or staff members unless it's genuinely necessary.\n" +
+          "- Support and management issues go through the ticket system unless a staff member says otherwise.\n\n" +
+          "### 6. Channel Etiquette\n" +
+          "- Each channel has a specific purpose — keep discussion relevant to it.\n" +
+          "- Off-topic chatter, spam, or posting support requests in the wrong place isn't allowed.\n" +
+          "- Flooding channels with repeated messages, reaction spam, or copy-pasted content counts as spam.\n\n" +
+          "### 7. Handling Disputes\n" +
+          "- Punishments and staff calls are not to be debated in public channels.\n" +
+          "- Use the appeal/ticket process if you believe a decision was wrong.\n\n" +
+          "### 8. Outside Advertising\n" +
+          "- Promoting other servers, communities, groups, or services requires staff permission first.\n\n" +
+          "### 9. General Conduct Clause\n" +
+          "- Staff reserve the right to act on any behavior that disrupts the server or harms the community, even if it isn't explicitly listed above.",
+      ),
+    )
+    .addSeparatorComponents(sep(2))
+    .addMediaGalleryComponents(footerGallery());
+
+  return payload([container], true);
+}
+
+// NOTE: rule #9 cuts off mid-sentence in the user's own spec ("Don't disconnect, reset your
+// character," and nothing after) — shipped verbatim rather than guessing how it ends. Flag this
+// to finish the sentence once the rest of the text is available.
+export function buildRobloxRulesEmbed() {
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(
+      text(
+        "# Delta Roleplay — Roleplay Rules\n\n" +
+          "### 1. Deathmatching (RDM)\n" +
+          "- You need a valid, escalated in-character reason before attacking, injuring, or killing another player.\n" +
+          "- The level of force used has to match what's actually happening in the scene.\n\n" +
+          "### 2. Vehicle-Based Deathmatching (VDM)\n" +
+          "- Vehicles can't be used as weapons without proper in-character justification.\n" +
+          "- No unrealistic ramming, mowing people down, or wrecking vehicles just to end a scene in your favor.\n\n" +
+          "### 3. Fail Roleplay (FRP)\n" +
+          "- Play out your injuries, restraints, age, and physical limitations realistically.\n" +
+          "- Don't magically produce items out of nowhere or ignore things like being cuffed or shot.\n\n" +
+          "### 4. No Intent to Roleplay (NITRP)\n" +
+          "- Don't join scenes purely to troll, farm reactions, or manufacture chaos.\n" +
+          "- Every scene should be driven by a believable character motive.\n\n" +
+          "### 5. Low-Effort / Passive Roleplay\n" +
+          "- Keep scenes grounded and realistic — avoid pointless shootouts or manufactured chaos for its own sake.\n" +
+          "- Don't force priority situations without real justification.\n\n" +
+          "### 6. Realistic Driving\n" +
+          "- Drive in a way that fits the vehicle, road conditions, and situation.\n" +
+          "- No reckless \"GTA-style\" driving, deliberate wrong-way driving, or unnecessary off-roading.\n\n" +
+          "### 7. Character Appearance Standards\n" +
+          "- Characters need to look and sound like real people.\n" +
+          "- Civilians can't wear tactical/military-style gear without specific approval.\n" +
+          "- Department members must wear their department's approved uniform and gear.\n\n" +
+          "### 7a. Departmental Equipment\n" +
+          "- Only use equipment and gear authorized for your specific department and rank.\n" +
+          "- LEO duty-belt loadouts are limited to approved items unless otherwise authorized.\n\n" +
+          "### 8. Impersonation\n" +
+          "- Civilians may not pose as law enforcement, fire, EMS, or staff.\n" +
+          "- Fake traffic stops, fake emergency lights, or claiming false authority are not allowed.\n\n" +
+          "### 9. Avoiding Roleplay by Leaving\n" +
+          "- Don't disconnect, reset your character,",
+      ),
+    )
+    .addSeparatorComponents(sep(2))
+    .addMediaGalleryComponents(footerGallery());
+
+  return payload([container], true);
 }

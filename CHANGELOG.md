@@ -2,6 +2,33 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (!dashboard) — Rules hub command with two ephemeral sub-panels
+
+`!dashboard` (`src/dashboardCommand.ts`, admin-tier — reused `DISPATCH_ADMIN_ROLE_IDS`, no specific
+role was named) posts the community rules panel (banner, two Section rows with button
+accessories) via the same `messageCreate` infrastructure as `!media`/`!embed`. Clicking "Discord"
+or "Roblox" replies with the matching ephemeral rules text.
+
+**Real fix needed to support this**: `payload()` in `sessionEmbeds.ts` didn't support ephemeral
+messages at all (every builder so far was a real channel post, never an interaction reply) — added
+an optional second parameter that ORs in `MessageFlags.Ephemeral` correctly, rather than the first
+attempt (spreading `{...payload(), ephemeral: true}` at the call site), which doesn't actually work
+since discord.js needs the flag baked into the numeric `flags` field when one's already being set
+explicitly, not layered on as a separate boolean.
+
+**Also fixed a real type-narrowing bug found while wiring in the new button routing**: the
+`interactionCreate` handler's button/command dispatch used a compound `interaction.isButton() &&
+isX(interaction.customId)` condition — TypeScript can't narrow `ButtonInteraction` out of the union
+across the rest of an `else if` chain when a compound condition like that is false (it doesn't know
+which half failed). Restructured to a plain `if (interaction.isButton())` first, which narrows
+correctly for every branch after it.
+
+**Known incomplete, not blocking**: the roleplay rules text's rule #9 cuts off mid-sentence in
+what was given — shipped verbatim, flagged in NEEDS_HUMAN_VERIFICATION.md rather than guessing
+how it ends.
+
+tsc clean, 57/57 tests passing.
+
 ## 2026-08-14 (!embed, welcome message, test-mode vote threshold) — Three more asks in the same session
 
 **`!embed <json>`** (`src/embedCommand.ts`) — Directive/Executive-tier (`EMBED_ADMIN_ROLE_IDS`, no

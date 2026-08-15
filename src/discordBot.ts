@@ -18,6 +18,11 @@ import {
 import { handleMediaRelayMessage } from "./mediaRelay.js";
 import { handleEmbedCommand } from "./embedCommand.js";
 import { handleGuildMemberAdd } from "./welcomeMessage.js";
+import {
+  handleDashboardCommand,
+  isDashboardButtonCustomId,
+  handleDashboardButtonInteraction,
+} from "./dashboardCommand.js";
 import { containerMessage } from "./ui.js";
 
 // GuildMessages + MessageContent added 2026-08-14 for the !media/!embed commands — MessageContent
@@ -39,6 +44,7 @@ export const client = new Client({
 client.on("messageCreate", (message) => {
   handleMediaRelayMessage(message).catch((err) => console.error("[media-relay] handler errored", err));
   handleEmbedCommand(message).catch((err) => console.error("[embed] handler errored", err));
+  handleDashboardCommand(message).catch((err) => console.error("[dashboard] handler errored", err));
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -47,13 +53,28 @@ client.on("guildMemberAdd", (member) => {
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
-  if (interaction.isButton() && !isSessionButtonCustomId(interaction.customId)) return;
+  if (
+    interaction.isButton() &&
+    !isSessionButtonCustomId(interaction.customId) &&
+    !isDashboardButtonCustomId(interaction.customId)
+  ) {
+    return;
+  }
 
   const label = interaction.isChatInputCommand() ? interaction.commandName : interaction.customId;
 
   try {
+    // A plain `if (interaction.isButton())` (not combined with `&&` into the same condition as
+    // the custom-id checks) is what lets TypeScript actually narrow the type across every
+    // subsequent `else if` below — a compound `isButton() && isX(...)` condition being false
+    // doesn't tell TS which half failed, so it can't exclude ButtonInteraction from the union for
+    // the rest of the chain. Learned this the hard way rewriting this block today.
     if (interaction.isButton()) {
-      await handleSessionButtonInteraction(interaction);
+      if (isSessionButtonCustomId(interaction.customId)) {
+        await handleSessionButtonInteraction(interaction);
+      } else {
+        await handleDashboardButtonInteraction(interaction);
+      }
     } else if (interaction.commandName === "link") {
       await handleLinkCommand(interaction);
     } else if (interaction.commandName === "callsign") {

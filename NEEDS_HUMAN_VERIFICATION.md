@@ -4,6 +4,14 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 ## Blocking / needs action
 
+- **Roblox/roleplay rules text (rule #9, "Avoiding Roleplay by Leaving") cuts off mid-sentence** —
+  "Don't disconnect, reset your character," and nothing after. Shipped verbatim in
+  `buildRobloxRulesEmbed()` (`sessionEmbeds.ts`) rather than guessing the ending — send the rest
+  of that rule to finish it.
+- **`!dashboard`'s permission tier wasn't specified beyond "admin"** — reused
+  `DISPATCH_ADMIN_ROLE_IDS` (the broadest existing admin-ish tier, Directive through Manager)
+  rather than guessing a narrower/different role. Confirm that's actually who should be able to
+  post the rules dashboard.
 - **Two privileged Discord intents likely need manually enabling — "Message Content Intent" and
   "Server Members Intent," neither was needed before today.** This bot never read regular chat
   message text or received member-join events before (only slash commands/buttons and voice

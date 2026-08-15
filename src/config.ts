@@ -219,6 +219,12 @@ export const WELCOME_ROLE_ID = "1535866581727449094";
 export const WELCOME_MEMBERCOUNT_EMOJI = "<:unknown:1538039862861504552>";
 export const WELCOME_DASHBOARD_URL = "https://discord.com/channels/1535866581316276256/1535866584604872768";
 
+// !dashboard (user ask, 2026-08-14) — "people with admin" wasn't a specific role, reused the
+// broadest existing admin-ish tier (DISPATCH_ADMIN_ROLE_IDS, Directive through Manager) rather
+// than inventing a narrower one or guessing a role ID that wasn't given.
+export const DASHBOARD_BANNER_URL =
+  "https://media.discordapp.net/attachments/1535866584290304072/1538029128807096361/Copy_of_Banners_4.png?ex=6a8130bf&is=6a7fdf3f&hm=ef198f2856a8d77e8db3f115c30f8daf0b2ab66af32fe46071ecac140aa614ac&=&format=webp&quality=lossless&width=3072&height=921";
+
 // UNCONFIRMED — no kick command has ever been confirmed live, same class of guess as
 // RELOAD_COMMAND_TEMPLATE/PM_COMMAND_TEMPLATE below. Used by /sessiondown's shutdown sequence.
 export const KICK_COMMAND_TEMPLATE = process.env.ERLC_KICK_COMMAND_TEMPLATE ?? ":kick {username}";
