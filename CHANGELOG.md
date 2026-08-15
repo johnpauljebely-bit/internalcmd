@@ -2,6 +2,27 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (bugfix) — CAD-originated 911 calls weren't broadcasting at all
+
+User reported calls placed through the CAD website's 911 quick-form weren't broadcasting. Root
+cause: `POST /internal/announce` (`src/internalApi.ts`) only ever tried ER:LC PA and the voice
+dispatcher — every OTHER broadcast path in the codebase (new call, call cleared — see
+`callDispatch.ts`) also always posts a text fallback to `RTO_CHANNEL_ID`, so a dispatcher sees
+something even when PA/voice both fail. This endpoint was the one place missing that fallback. In
+the current live state both of its channels are commonly down at once: ER:LC PA fails 403 (stale
+IP allowlist, already flagged below) and the voice dispatcher no-ops silently unless someone has
+an active `/dispatch enable` session running — so a CAD-originated call had nowhere to land.
+
+Fixed by adding `announceToRTO(message)` into the same `Promise.all`, matching the established
+pattern; success now counts if ANY of PA/voice/RTO-text got through (previously PA-or-voice).
+Deployed live via SFTP (`dist/internalApi.js`) — **still needs a manual restart via the Orihost
+panel to take effect**, no programmatic restart access exists.
+
+This does not fix ER:LC PA itself — the IP allowlist issue is separate and needs the user to add
+`176.100.37.91` at https://api.erlc.gg/server-owners.
+
+tsc clean, 57/57 tests passing.
+
 ## 2026-08-14 (!dashboard) — Rules hub command with two ephemeral sub-panels
 
 `!dashboard` (`src/dashboardCommand.ts`, admin-tier — reused `DISPATCH_ADMIN_ROLE_IDS`, no specific
