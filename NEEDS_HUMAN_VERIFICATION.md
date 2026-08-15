@@ -4,14 +4,27 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 ## Blocking / needs action
 
-- **!media relay needs the "Message Content Intent" enabled in the Discord Developer Portal —
-  likely not on by default.** This bot never needed to read regular chat message text before
-  (only slash commands/buttons, which don't need it); the new `!media` relay
-  (`src/mediaRelay.ts`) is the first feature that does. `GatewayIntentBits.MessageContent` is
-  requested in code, but Discord also requires it to be manually toggled ON for the bot's
-  application at https://discord.com/developers/applications → your app → Bot → "Message Content
-  Intent" — without that, `message.content` comes through empty and `!media` will never match,
-  silently. Check this before assuming the feature is broken if it doesn't respond.
+- **Two privileged Discord intents likely need manually enabling — "Message Content Intent" and
+  "Server Members Intent," neither was needed before today.** This bot never read regular chat
+  message text or received member-join events before (only slash commands/buttons and voice
+  connections). Both are requested in code (`GatewayIntentBits.MessageContent`,
+  `GatewayIntentBits.GuildMembers`) but Discord ALSO requires each toggled ON separately at
+  https://discord.com/developers/applications → your app → Bot tab, or they silently no-op:
+  `message.content` comes through empty (breaks `!media` and `!embed`) and `guildMemberAdd` never
+  fires at all (breaks the welcome message + auto-role) — no error, just nothing happening. Check
+  both before assuming any of these three features are broken.
+- **Session vote threshold is TEMPORARILY 1, not the real 10** (`SESSION_VOTE_THRESHOLD` in
+  `config.ts`) — set this way explicitly per the user's "just for now sessions only need 1 vote so
+  i can test" (2026-08-14). **Change it back to 10 once testing is done** — flagged here so it
+  doesn't get forgotten and accidentally ships permanently wrong.
+- **`!embed` — trusts arbitrary JSON verbatim from anyone holding a Directive/Executive role, no
+  validation beyond "does it parse."** That's the intended design (the whole point is letting
+  trusted staff send any Components V2 payload), not a bug — but worth being aware this is a real
+  amount of trust placed in `EMBED_ADMIN_ROLE_IDS`. Never tested live.
+- **Welcome message + auto-role — never tested live.** Confirm a real join actually assigns
+  `WELCOME_ROLE_ID` and posts to `WELCOME_CHANNEL_ID` with a correct live member count and a
+  working custom emoji (`WELCOME_MEMBERCOUNT_EMOJI` — id `1538039862861504552`, unconfirmed the
+  bot actually has access to render it if it's from a different/no-longer-shared server).
 - **Session system (2026-08-14) — built end to end from a precise Discord Components V2 spec,
   never tested live.** `/sessionpanel`, `/sessionstart`, `/sessiondown`, the vote/cast-vote/list-
   voters flow, the full-capacity announcement, and the new verification log embed

@@ -2,6 +2,33 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-14 (!embed, welcome message, test-mode vote threshold) — Three more asks in the same session
+
+**`!embed <json>`** (`src/embedCommand.ts`) — Directive/Executive-tier (`EMBED_ADMIN_ROLE_IDS`, no
+Whitelisted Command this time — deliberately narrower than the existing `CALLSIGN_ADMIN_ROLE_IDS`)
+can post `!embed` followed by raw JSON and the bot sends it verbatim as the message. No schema
+validation beyond `JSON.parse` succeeding — that's the intended design, not a gap, since the whole
+point is letting trusted staff send arbitrary Components V2 payloads. Malformed JSON or a payload
+Discord itself rejects both get reported back to the sender instead of failing silently.
+
+**Welcome message + auto-role on join** (`src/welcomeMessage.ts`, new `guildMemberAdd` listener) —
+assigns `WELCOME_ROLE_ID` and posts a greeting to `WELCOME_CHANNEL_ID` with a live member-count
+button and a Dashboard link button, built from the user's exact JSON (notably: no Container
+wrapper this time, just a bare `[TextDisplay, ActionRow]` — the `TopLevelComponent` type in
+`sessionEmbeds.ts` had to widen to include `ActionRowBuilder` to allow that). Greeting text is
+randomized from a short pool (`WELCOME_GREETINGS`) of phrases chosen to read naturally directly
+before ", <@user>!" per the user's own example ("Hola! Glad to see you").
+
+**Another real architectural first**: `guildMemberAdd` needs the `GuildMembers` intent, which
+(like `MessageContent` added earlier today) is privileged — needs manually enabling in the
+Developer Portal separately from the code change. Flagged in NEEDS_HUMAN_VERIFICATION.md.
+
+**Session vote threshold dropped to 1** (was 10) — explicitly temporary, per the user's own "just
+for now... so i can test." Flagged clearly in both the code comment and
+NEEDS_HUMAN_VERIFICATION.md so it doesn't get forgotten and ship permanently wrong.
+
+tsc clean, 57/57 tests passing.
+
 ## 2026-08-14 (media relay) — !media command reposts an attached image to a fixed channel
 
 New: any role-`1535866581853413376` holder, in any channel, typing exactly "!media" with an image

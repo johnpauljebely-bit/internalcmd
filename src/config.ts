@@ -48,6 +48,17 @@ export const CALLSIGN_ADMIN_ROLE_IDS = [
   "1535866581823922236", // Whitelisted Command
 ];
 
+// !embed permission (user ask, 2026-08-14) — "directive or executive role" specifically, no
+// Whitelisted Command this time (deliberately narrower than CALLSIGN_ADMIN_ROLE_IDS above, which
+// does include it).
+export const EMBED_ADMIN_ROLE_IDS = [
+  COMMUNITY_DIRECTIVE_ROLE_ID, // Community Directive
+  "1535866581891026945", // Executive Team
+  "1535866581891026944", // Lead Executive
+  "1535866581874376765", // Senior Executive
+  "1535866581874376764", // Executive
+];
+
 // /dispatch enable|disable permission — Directors, Executive-tier, and Managers. Deliberately a
 // different set from CALLSIGN_ADMIN_ROLE_IDS (no Whitelisted Command, adds Management tier).
 export const DISPATCH_ADMIN_ROLE_IDS = [
@@ -189,7 +200,10 @@ export const SESSION_BANNER_URL =
 export const SESSION_FOOTER_IMAGE_URL =
   "https://media.discordapp.net/attachments/1535866584290304072/1538028078473937017/image.png?ex=6a812fc5&is=6a7fde45&hm=b3a07fcecf5134089cfb9727979d58af426ddaebc55d3f54fd64886a17d8690b&=&format=webp&quality=lossless";
 
-export const SESSION_VOTE_THRESHOLD = 10;
+// TEMPORARY — set to 1 instead of the real 10 per the user's explicit "just for now sessions
+// only need 1 vote so i can test" (2026-08-14). Revert to 10 once testing is done — flagged
+// here AND in NEEDS_HUMAN_VERIFICATION.md so it doesn't get forgotten.
+export const SESSION_VOTE_THRESHOLD = 1;
 export const SESSION_PANEL_UPDATE_INTERVAL_MS = 15_000;
 
 // !media relay (user ask, 2026-08-14) — anyone holding this role, in any channel, posting "!media"
@@ -197,6 +211,13 @@ export const SESSION_PANEL_UPDATE_INTERVAL_MS = 15_000;
 export const MEDIA_RELAY_ROLE_ID = "1535866581853413376";
 export const MEDIA_RELAY_CHANNEL_ID = "1535866584881438832";
 export const MEDIA_RELAY_EMOJI = "<:camera:1538036373959741561>";
+
+// Welcome message on join (user ask, 2026-08-14) — sent to this channel, plus the role every new
+// member gets assigned automatically.
+export const WELCOME_CHANNEL_ID = "1535866585120641054";
+export const WELCOME_ROLE_ID = "1535866581727449094";
+export const WELCOME_MEMBERCOUNT_EMOJI = "<:unknown:1538039862861504552>";
+export const WELCOME_DASHBOARD_URL = "https://discord.com/channels/1535866581316276256/1535866584604872768";
 
 // UNCONFIRMED — no kick command has ever been confirmed live, same class of guess as
 // RELOAD_COMMAND_TEMPLATE/PM_COMMAND_TEMPLATE below. Used by /sessiondown's shutdown sequence.

@@ -11,7 +11,14 @@ import {
   ActionRowBuilder,
   MessageFlags,
 } from "discord.js";
-import { SESSION_BANNER_URL, SESSION_FOOTER_IMAGE_URL, SESSION_JOIN_CODE, MEDIA_RELAY_EMOJI } from "./config.js";
+import {
+  SESSION_BANNER_URL,
+  SESSION_FOOTER_IMAGE_URL,
+  SESSION_JOIN_CODE,
+  MEDIA_RELAY_EMOJI,
+  WELCOME_MEMBERCOUNT_EMOJI,
+  WELCOME_DASHBOARD_URL,
+} from "./config.js";
 
 function bannerGallery(): MediaGalleryBuilder {
   return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(SESSION_BANNER_URL));
@@ -36,7 +43,7 @@ function text(content: string): TextDisplayBuilder {
 // shape in ui.ts so callers can pass this straight to channel.send()/interaction.reply() with no
 // cast needed at the call site (discord.js's send/reply overloads accept this shape directly, the
 // same way they already accept containerMessage's output elsewhere in this codebase).
-type TopLevelComponent = ContainerBuilder | TextDisplayBuilder;
+type TopLevelComponent = ContainerBuilder | TextDisplayBuilder | ActionRowBuilder<ButtonBuilder>;
 
 interface ComponentsV2Payload {
   flags: number;
@@ -275,4 +282,44 @@ export function buildMediaRelayEmbed(authorDiscordId: string, imageUrl: string) 
     .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl)));
 
   return payload([container]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 8. Welcome message on join — no Container wrapper this time, matches the exact top-level
+// [TextDisplay, ActionRow] shape given (unlike every other panel here, which wraps in Container).
+// ---------------------------------------------------------------------------------------------
+// Short phrases that read naturally directly before ", <@userid>!" — per the user's own example
+// ("Hola! Glad to see you"). Kept short and varied rather than a single fixed greeting.
+const WELCOME_GREETINGS = [
+  "Welcome",
+  "Hola! Glad to see you",
+  "Hey there",
+  "Great to see you",
+  "Glad to have you here",
+  "Howdy",
+  "Welcome aboard",
+  "Good to see you",
+];
+
+function randomGreeting(): string {
+  return WELCOME_GREETINGS[Math.floor(Math.random() * WELCOME_GREETINGS.length)];
+}
+
+export function buildWelcomeMessage(newMemberId: string, memberCount: number) {
+  const textDisplay = text(
+    `${randomGreeting()}, <@${newMemberId}>! Enjoy *Vancouver's* best roleplay.\n` +
+      "-# To roleplay, check <#1535866584604872775>. For LEO, visit <#1535866584881438839>.",
+  );
+
+  const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("welcome_member_count")
+      .setLabel(`${memberCount} Members`)
+      .setEmoji(WELCOME_MEMBERCOUNT_EMOJI)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true),
+    new ButtonBuilder().setLabel("Dashboard").setStyle(ButtonStyle.Link).setURL(WELCOME_DASHBOARD_URL),
+  );
+
+  return payload([textDisplay, buttons]);
 }

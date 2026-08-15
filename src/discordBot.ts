@@ -16,23 +16,33 @@ import {
   handleSessionButtonInteraction,
 } from "./commands/session.js";
 import { handleMediaRelayMessage } from "./mediaRelay.js";
+import { handleEmbedCommand } from "./embedCommand.js";
+import { handleGuildMemberAdd } from "./welcomeMessage.js";
 import { containerMessage } from "./ui.js";
 
-// GuildMessages + MessageContent added 2026-08-14 for the !media relay — MessageContent is a
-// privileged intent that also needs to be manually enabled in the Discord Developer Portal for
-// this bot's application, or message.content will come through empty even with this bit set.
-// Flagged in NEEDS_HUMAN_VERIFICATION.md.
+// GuildMessages + MessageContent added 2026-08-14 for the !media/!embed commands — MessageContent
+// is a privileged intent that also needs to be manually enabled in the Discord Developer Portal
+// for this bot's application, or message.content will come through empty even with this bit set.
+// GuildMembers (same day, for the welcome-message feature's guildMemberAdd event) is ALSO
+// privileged and needs the same manual "Server Members Intent" toggle. Both flagged in
+// NEEDS_HUMAN_VERIFICATION.md.
 export const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ],
 });
 
 client.on("messageCreate", (message) => {
   handleMediaRelayMessage(message).catch((err) => console.error("[media-relay] handler errored", err));
+  handleEmbedCommand(message).catch((err) => console.error("[embed] handler errored", err));
+});
+
+client.on("guildMemberAdd", (member) => {
+  handleGuildMemberAdd(member).catch((err) => console.error("[welcome] handler errored", err));
 });
 
 client.on("interactionCreate", async (interaction) => {
