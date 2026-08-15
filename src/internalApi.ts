@@ -4,6 +4,7 @@ import { announcePA, sendPrivateMessage } from "./erlcClient.js";
 import { announceToActiveDispatcher } from "./voice/activeDispatcherRegistry.js";
 import { formatEmergencyCodesForSpeech } from "./speechFormat.js";
 import { findLinkByDiscordId } from "./db.js";
+import { announceToRTO } from "./discordBot.js";
 
 // Plain !== leaks timing information proportional to how many leading characters match — usually
 // theoretical over a network (jitter dominates), but this endpoint shares the same public
@@ -77,20 +78,29 @@ export function registerInternalApi(app: Express): void {
 
     console.log(`[internal-api] announcing: "${message.slice(0, 120)}"`);
 
-    Promise.all([announcePA(message), announceToActiveDispatcher(spokenMessage)])
-      .then(([sent, spoken]) => {
-        console.log(`[internal-api] result: PA sent=${sent}, spoken=${spoken}`);
-        // Success if EITHER channel got the message through — critical fix (2026-08-14): this used
-        // to key success purely off `sent` (ER:LC PA), which meant this endpoint returned a 502
-        // for EVERY call while ER:LC's IP isn't allowlisted (a known, separate, already-documented
-        // issue), even on calls where the voice announcement worked perfectly. Once the CAD added
-        // retry-on-5xx logic, that false 502 caused a genuine duplicate broadcast — confirmed live
-        // via these very logs, the exact same message announced twice a couple seconds apart. Only
-        // report failure when BOTH channels genuinely failed.
-        if (sent || spoken) {
-          res.status(200).json({ ok: true, pa: sent, voice: spoken });
+    // Every other broadcast path in this codebase (new calls, cleared calls — see
+    // callDispatch.ts) always posts a text fallback to RTO_CHANNEL_ID alongside PA/voice, so a
+    // dispatcher always sees SOMETHING even when both of those fail. This endpoint (the CAD
+    // website's 911 quick-form) was the one place missing that fallback — with ER:LC's PA down
+    // (stale IP allowlist, already documented) and no active `/dispatch enable` voice session,
+    // CAD-originated calls had nowhere to land and silently vanished. Added 2026-08-14 after the
+    // user reported CAD-side 911 calls weren't broadcasting at all.
+    Promise.all([
+      announcePA(message),
+      announceToActiveDispatcher(spokenMessage),
+      announceToRTO(message).then(() => true).catch((err) => {
+        console.error("[internal-api] RTO text fallback failed to post", err);
+        return false;
+      }),
+    ])
+      .then(([sent, spoken, posted]) => {
+        console.log(`[internal-api] result: PA sent=${sent}, spoken=${spoken}, RTO posted=${posted}`);
+        // Success if ANY channel got the message through. Only report failure when all three
+        // genuinely failed.
+        if (sent || spoken || posted) {
+          res.status(200).json({ ok: true, pa: sent, voice: spoken, rto: posted });
         } else {
-          res.status(502).json({ ok: false, error: "announcement failed on both PA and voice — check bot logs" });
+          res.status(502).json({ ok: false, error: "announcement failed on PA, voice, and RTO text — check bot logs" });
         }
       })
       .catch((err) => {
