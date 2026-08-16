@@ -237,6 +237,88 @@ export const COMMUNITY_MEMBER_ROLE_ID = process.env.COMMUNITY_MEMBER_ROLE_ID;
 export const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
 export const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE_ID;
 
+// !marketplace (user ask, 2026-08-15) — reuses DISPATCH_ADMIN_ROLE_IDS, same "an admin" precedent
+// as !dashboard (no narrower tier was named).
+export const MARKETPLACE_ADMIN_ROLE_IDS = DISPATCH_ADMIN_ROLE_IDS;
+
+// /check permission — the exact role ID the user gave. Happens to be the same value as
+// SHERIFF_COMPLIANCE_EXEMPT_ROLE_ID above (coincidence flagged to the user, not a shared meaning —
+// kept as its own named constant so the two features stay conceptually independent even though
+// they currently resolve to the same role).
+export const MARKETPLACE_CHECK_ROLE_ID = "1535866581853413383";
+
+export const XMARK_EMOJI = "<:xmark:1538400165784981544>";
+export const CHECKMARK_EMOJI = "<:check:1538400114618540103>";
+
+export const MARKETPLACE_BANNER_URL =
+  "https://media.discordapp.net/attachments/1535866584290304072/1538052481916084286/Copy_of_Banners_7.png?ex=6a81467f&is=6a7ff4ff&hm=a174d7a8171d533994aea657ebc8f550f3e8410150570740acf1568e3fa0213b&=&format=webp&quality=lossless&width=1024&height=307";
+
+// "Logos_4.png" — thumbnail accessory on /check's result embed only, distinct from the shared
+// SESSION_FOOTER_IMAGE_URL footer banner reused everywhere else in the marketplace flow.
+export const MARKETPLACE_CHECK_THUMBNAIL_URL =
+  "https://media.discordapp.net/attachments/1535866584290304072/1538403173700730970/Logos_4.png?ex=6a828d1a&is=6a813b9a&hm=3268e7298e034253a8667f6fcc8cf17942b9eca2a7f7c9d5c3bddc2e62a16131&=&format=webp&quality=lossless&width=640&height=640";
+
+// UNCONFIRMED — "Once claimed, the Delta Plus role will be automatically assigned" per the user's
+// own FAQ text, but no real role ID was given. Left unset on purpose (not guessed), same pattern
+// as COMMUNITY_MEMBER_ROLE_ID/VERIFIED_ROLE_ID/UNVERIFIED_ROLE_ID above — role assignment is
+// skipped and logged (not silently wrong) until this is set.
+export const DELTA_PLUS_ROLE_ID = process.env.DELTA_PLUS_ROLE_ID;
+
+export interface MarketplaceItem {
+  key: string;
+  name: string;
+  description: string;
+  price: string;
+  buttonLabel: string;
+  url: string;
+  // null = not claimable via the "Claim Purchase" button (e.g. Donations, which is ticket-only —
+  // there's no Roblox gamepass to check ownership of).
+  gamepassId: string | null;
+}
+
+// Pulled directly from the user's own marketplace JSON. Confirmed with the user 2026-08-15: Paid
+// Advert and Delta Plus intentionally share gamepass 1949462662 — owning it lets a member claim
+// EITHER listed item (whichever is still unclaimed for them), not both from one purchase, since
+// claims are tracked per (roblox_user_id, item key) — see hasClaimedMarketplaceItem in db.ts.
+export const MARKETPLACE_ITEMS: MarketplaceItem[] = [
+  {
+    key: "donations",
+    name: "Donations",
+    description: "Help out our growing community by donating",
+    price: "R$0-∞",
+    buttonLabel: "Open Ticket",
+    url: "https://discord.com/channels/1535866581316276256/1535866584604872771",
+    gamepassId: null,
+  },
+  {
+    key: "spgw",
+    name: "Sponsored Giveaway",
+    description: "Grow your memberbase with a sponsored giveaway",
+    price: "R$500",
+    buttonLabel: "Purchase",
+    url: "https://roblox.com/game-pass/1948724733",
+    gamepassId: "1948724733",
+  },
+  {
+    key: "paid_advert",
+    name: "Paid Advert (everyone)",
+    description: "Grow your memberbase with a sponsored giveaway",
+    price: "R$399",
+    buttonLabel: "Purchase",
+    url: "https://roblox.com/game-pass/1949462662",
+    gamepassId: "1949462662",
+  },
+  {
+    key: "delta_plus",
+    name: "Delta Plus",
+    description: "Grow your memberbase with a sponsored giveaway",
+    price: "R$399",
+    buttonLabel: "Purchase",
+    url: "https://roblox.com/game-pass/1949462662",
+    gamepassId: "1949462662",
+  },
+];
+
 // Deduped across RCMP + BCHP + Ownership for the /callsign assign rank dropdown — actual validity
 // per department is still checked against CALLSIGN_RANGES when the command runs (this is why
 // picking "Ownership" as the rank under RCMP/BCHP correctly gets rejected — that combination

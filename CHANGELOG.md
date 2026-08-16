@@ -2,6 +2,47 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-15 (!marketplace) — Purchasable-items panel, Roblox gamepass claim flow, /check for staff
+
+`!marketplace` (admin-tier, reused `MARKETPLACE_ADMIN_ROLE_IDS` = `DISPATCH_ADMIN_ROLE_IDS`, same
+"an admin" precedent as `!dashboard`) posts the marketplace panel (`marketplaceEmbeds.ts`,
+`marketplaceCommand.ts`): a purchasable-items container (Donations/SPGW/Paid Advert/Delta Plus,
+each a real Link button) and a claim/FAQ container below it.
+
+**Fixed the same Discord button-schema bug as the last `!embed` payload**: the given JSON had
+`style: 5` (Link) purchase buttons carrying both a `url` AND a `custom_id` — stripped `custom_id`
+from all of them in the builder (Link buttons can't have one, learned this live last session).
+
+**Claim Purchase button**: checks `/link` status first (unlinked → ephemeral "account isn't
+linked"). If linked, walks the marketplace items in order, skips any this Roblox account already
+claimed (`hasClaimedMarketplaceItem`), and claims the first one they actually own via Roblox's
+public `inventory.roblox.com/.../is-owned` endpoint (no group perms needed — confirmed, answering
+the user's own "idk if u need any perms" question). On success: generates a unique 6-char code
+(same alphabet/generator as `/link`'s verify code), records it in a new `marketplace_claims` table
+(`UNIQUE (roblox_user_id, item_key)` is what actually enforces "once per purchase"), DMs the code
+embed, and assigns the Delta Plus role if that's the claimed item (skipped/logged —
+`DELTA_PLUS_ROLE_ID` was never given, see NEEDS_HUMAN_VERIFICATION.md). On failure: the exact
+ephemeral wording given, verbatim (including "Sucessfully" — not fixing the user's own copy per
+this session's established pattern of shipping given text as-is).
+
+**Confirmed with the user before building**: "Paid Advert" and "Delta Plus" intentionally share
+gamepass `1949462662` in the source JSON — owning it lets someone claim either one (whichever
+they haven't already claimed), not both from a single purchase, since claims are tracked per
+(Roblox account, item key) independently.
+
+**FAQ button** — the user's own 3 Q&As plus 4 more added in the same format (flagged as added, not
+given, in case wording needs adjusting).
+
+**`/check <code>`** (new slash command, gated to role `1535866581853413383` — the same ID as
+`SHERIFF_COMPLIANCE_EXEMPT_ROLE_ID`, flagged as a likely coincidence not a shared meaning) looks up
+a claim and replies with the given result embed — non-ephemeral, matching the user's own payload
+(no Ephemeral flag set) and the point of the command (visible in a ticket channel while staff
+process a redemption). Re-running `/check` on an already-processed code just shows the same stored
+row — no separate "already checked" state needed.
+
+tsc clean, 57/57 tests passing. Not yet deployed live — see NEEDS_HUMAN_VERIFICATION.md for the
+two open items (Delta Plus role ID, live gamepass-check verification).
+
 ## 2026-08-14 (policy change) — Dispatch/police traffic no longer goes out over ER:LC's in-game PA
 
 User flagged (after seeing a `:h` command 422 for an officer panic broadcast) that police/dispatch

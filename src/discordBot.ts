@@ -15,6 +15,7 @@ import {
   isSessionButtonCustomId,
   handleSessionButtonInteraction,
 } from "./commands/session.js";
+import { checkCommand, handleCheckCommand } from "./commands/check.js";
 import { handleMediaRelayMessage } from "./mediaRelay.js";
 import { handleEmbedCommand } from "./embedCommand.js";
 import { handleGuildMemberAdd } from "./welcomeMessage.js";
@@ -23,6 +24,11 @@ import {
   isDashboardButtonCustomId,
   handleDashboardButtonInteraction,
 } from "./dashboardCommand.js";
+import {
+  handleMarketplaceCommand,
+  isMarketplaceButtonCustomId,
+  handleMarketplaceButtonInteraction,
+} from "./marketplaceCommand.js";
 import { containerMessage } from "./ui.js";
 
 // GuildMessages + MessageContent added 2026-08-14 for the !media/!embed commands — MessageContent
@@ -45,6 +51,7 @@ client.on("messageCreate", (message) => {
   handleMediaRelayMessage(message).catch((err) => console.error("[media-relay] handler errored", err));
   handleEmbedCommand(message).catch((err) => console.error("[embed] handler errored", err));
   handleDashboardCommand(message).catch((err) => console.error("[dashboard] handler errored", err));
+  handleMarketplaceCommand(message).catch((err) => console.error("[marketplace] handler errored", err));
 });
 
 client.on("guildMemberAdd", (member) => {
@@ -56,7 +63,8 @@ client.on("interactionCreate", async (interaction) => {
   if (
     interaction.isButton() &&
     !isSessionButtonCustomId(interaction.customId) &&
-    !isDashboardButtonCustomId(interaction.customId)
+    !isDashboardButtonCustomId(interaction.customId) &&
+    !isMarketplaceButtonCustomId(interaction.customId)
   ) {
     return;
   }
@@ -72,6 +80,8 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.isButton()) {
       if (isSessionButtonCustomId(interaction.customId)) {
         await handleSessionButtonInteraction(interaction);
+      } else if (isMarketplaceButtonCustomId(interaction.customId)) {
+        await handleMarketplaceButtonInteraction(interaction);
       } else {
         await handleDashboardButtonInteraction(interaction);
       }
@@ -91,6 +101,8 @@ client.on("interactionCreate", async (interaction) => {
       await handleSessionStartCommand(interaction);
     } else if (interaction.commandName === "sessiondown") {
       await handleSessionDownCommand(interaction);
+    } else if (interaction.commandName === "check") {
+      await handleCheckCommand(interaction);
     }
   } catch (err) {
     console.error(`[discord] interaction "${label}" errored`, err);
@@ -133,11 +145,12 @@ export async function registerCommands(token: string, applicationId: string) {
       sessionPanelCommand.toJSON(),
       sessionStartCommand.toJSON(),
       sessionDownCommand.toJSON(),
+      checkCommand.toJSON(),
     ],
   });
   console.log(
     "[discord] registered guild slash commands: /link, /callsign, /mylink, /bolo, /dispatch, " +
-      "/sessionpanel, /sessionstart, /sessiondown",
+      "/sessionpanel, /sessionstart, /sessiondown, /check",
   );
 }
 
@@ -188,6 +201,19 @@ export async function dmUser(discordId: string, message: string): Promise<boolea
     return true;
   } catch (err) {
     console.error(`[discord] failed to DM ${discordId}`, err);
+    return false;
+  }
+}
+
+// Like dmUser, but for a full Components V2 payload (e.g. the marketplace claim code) instead of
+// plain text — dmUser always wraps in containerMessage(), which only takes a string.
+export async function dmPayload(discordId: string, payload: unknown): Promise<boolean> {
+  try {
+    const user = await client.users.fetch(discordId);
+    await user.send(payload as never);
+    return true;
+  } catch (err) {
+    console.error(`[discord] failed to DM payload to ${discordId}`, err);
     return false;
   }
 }

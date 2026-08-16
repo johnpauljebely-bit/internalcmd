@@ -151,6 +151,23 @@ export async function initDb(): Promise<void> {
       discord_id TEXT PRIMARY KEY,
       last_seen_at TIMESTAMPTZ NOT NULL
     );
+
+    -- !marketplace's "Claim Purchase" flow (user ask, 2026-08-15). UNIQUE (roblox_user_id,
+    -- item_key) is what makes "only once per purchase" real — an INSERT for an item the same
+    -- Roblox account already claimed fails the constraint rather than silently creating a second
+    -- code, so hasClaimedMarketplaceItem must always be checked first (the constraint is the
+    -- backstop, not the primary guard, since a friendly "already claimed" response needs a check
+    -- before attempting the insert anyway).
+    CREATE TABLE IF NOT EXISTS marketplace_claims (
+      code TEXT PRIMARY KEY,
+      discord_id TEXT NOT NULL,
+      roblox_user_id TEXT NOT NULL,
+      roblox_username TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (roblox_user_id, item_key)
+    );
   `);
 
   for (const stmt of [
@@ -529,6 +546,47 @@ export async function updateLiveUnitStatus(
       [status, callId, callsignKey],
     );
   }
+}
+
+export interface MarketplaceClaimRow {
+  code: string;
+  discord_id: string;
+  roblox_user_id: string;
+  roblox_username: string;
+  item_key: string;
+  item_name: string;
+  claimed_at: Date;
+}
+
+export async function hasClaimedMarketplaceItem(robloxUserId: string, itemKey: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    "SELECT 1 FROM marketplace_claims WHERE roblox_user_id = $1 AND item_key = $2",
+    [robloxUserId, itemKey],
+  );
+  return rows.length > 0;
+}
+
+export async function createMarketplaceClaim(params: {
+  code: string;
+  discordId: string;
+  robloxUserId: string;
+  robloxUsername: string;
+  itemKey: string;
+  itemName: string;
+}): Promise<void> {
+  await pool.query(
+    `INSERT INTO marketplace_claims (code, discord_id, roblox_user_id, roblox_username, item_key, item_name)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [params.code, params.discordId, params.robloxUserId, params.robloxUsername, params.itemKey, params.itemName],
+  );
+}
+
+export async function findMarketplaceClaimByCode(code: string): Promise<MarketplaceClaimRow | undefined> {
+  const { rows } = await pool.query<MarketplaceClaimRow>(
+    "SELECT * FROM marketplace_claims WHERE code = $1",
+    [code],
+  );
+  return rows[0];
 }
 
 export default pool;
