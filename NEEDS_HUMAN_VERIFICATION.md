@@ -4,9 +4,9 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
 
 ## Blocking / needs action
 
-- **`DELTA_PLUS_ROLE_ID` is unset** — the marketplace FAQ says claiming Delta Plus auto-assigns a
-  role, but no real role ID was given. Role assignment is skipped and logged
-  (`marketplaceCommand.ts`'s `assignDeltaPlusRole`) until this env var is set — see `.env.example`.
+- ~~`DELTA_PLUS_ROLE_ID` is unset~~ — **resolved 2026-08-15**, user provided the real role ID
+  (`1535866581786296481`). Set live in the Orihost `.env` — needs a bot restart to take effect,
+  same as everything else deployed this session.
 - **Gamepass ownership check (`checkOwnsGamepass` in `robloxClient.ts`) is unverified live** — uses
   Roblox's public `inventory.roblox.com/v1/users/{id}/items/GamePass/{id}/is-owned` endpoint (no
   auth/group perms needed, confirmed public). Never tested against a real purchase — verify the

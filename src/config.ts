@@ -258,10 +258,9 @@ export const MARKETPLACE_BANNER_URL =
 export const MARKETPLACE_CHECK_THUMBNAIL_URL =
   "https://media.discordapp.net/attachments/1535866584290304072/1538403173700730970/Logos_4.png?ex=6a828d1a&is=6a813b9a&hm=3268e7298e034253a8667f6fcc8cf17942b9eca2a7f7c9d5c3bddc2e62a16131&=&format=webp&quality=lossless&width=640&height=640";
 
-// UNCONFIRMED — "Once claimed, the Delta Plus role will be automatically assigned" per the user's
-// own FAQ text, but no real role ID was given. Left unset on purpose (not guessed), same pattern
-// as COMMUNITY_MEMBER_ROLE_ID/VERIFIED_ROLE_ID/UNVERIFIED_ROLE_ID above — role assignment is
-// skipped and logged (not silently wrong) until this is set.
+// "Once claimed, the Delta Plus role will be automatically assigned" per the marketplace FAQ.
+// Real role ID provided 2026-08-15 — read from env (set in Orihost's .env directly) rather than
+// hardcoded here, matching how every other secret/deployment-specific value in this file works.
 export const DELTA_PLUS_ROLE_ID = process.env.DELTA_PLUS_ROLE_ID;
 
 export interface MarketplaceItem {
