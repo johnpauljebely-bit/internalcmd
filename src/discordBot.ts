@@ -47,6 +47,26 @@ export const client = new Client({
   ],
 });
 
+// Added 2026-08-15 — confirmed live there was NO listener on either of these before now. A failed
+// gateway connection has nowhere to surface without them: client.login()'s returned promise only
+// resolves on a successful "ready" event, so a shard that fails to connect (or gets stuck
+// reconnecting) just makes login() hang forever with zero output, not reject with an error. This
+// is exactly what happened after the previous fix (app.listen() now succeeds and prints, but
+// nothing after it ever does) — these listeners exist so the NEXT time this happens, the actual
+// reason is in the log instead of a silent hang.
+client.on("error", (err) => {
+  console.error("[discord] client error", err);
+});
+client.on("shardError", (err, shardId) => {
+  console.error(`[discord] shard ${shardId} error`, err);
+});
+client.on("shardDisconnect", (event, shardId) => {
+  console.warn(`[discord] shard ${shardId} disconnected (code ${event.code})`);
+});
+client.on("shardReconnecting", (shardId) => {
+  console.warn(`[discord] shard ${shardId} reconnecting`);
+});
+
 client.on("messageCreate", (message) => {
   handleMediaRelayMessage(message).catch((err) => console.error("[media-relay] handler errored", err));
   handleEmbedCommand(message).catch((err) => console.error("[embed] handler errored", err));
@@ -168,7 +188,28 @@ export async function registerCommands(token: string, applicationId: string) {
 // commands stay registered from the last successful sync either way — this only fails to update
 // them, it doesn't remove them.
 export async function startBot(token: string, applicationId: string) {
-  await client.login(token);
+  // Doesn't abandon the real login attempt (still awaited below) — just makes a stuck connection
+  // diagnosable instead of silent. Confirmed live 2026-08-15: after fixing the previous startup
+  // stall (registerCommands blocking everything), THIS became the new silent-hang point — nothing
+  // printed after "listening on port ...", and none of the shard error/disconnect listeners added
+  // alongside this fired either. That points at the gateway connection (or the initial GET
+  // /gateway/bot REST call login() makes first) never even getting a response from Orihost's
+  // container, not a Discord-side error — but that's still a guess without this log actually firing.
+  const stuckWarningTimer = setTimeout(() => {
+    console.error(
+      "[discord] client.login() still hasn't resolved after 30s, and no shard error/disconnect " +
+        "event has fired either — the gateway connection (or the REST call login() makes first) " +
+        "appears to be getting no response at all, not failing with an error. Likely outbound " +
+        "network access to discord.com/gateway.discord.gg from this host, not a code bug. Still " +
+        "waiting — will log '[discord] logged in as ...' below if/when it eventually connects.",
+    );
+  }, 30_000);
+
+  try {
+    await client.login(token);
+  } finally {
+    clearTimeout(stuckWarningTimer);
+  }
   console.log(`[discord] logged in as ${client.user?.tag}`);
 
   registerCommands(token, applicationId).catch((err) => {
