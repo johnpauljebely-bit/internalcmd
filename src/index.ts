@@ -83,6 +83,19 @@ app.post(
 async function main() {
   await initDb();
   registerInternalApi(app);
+
+  // Binds the HTTP server before touching Discord at all — the webhook receiver, health check,
+  // and CAD-facing /internal/* endpoints don't depend on the Discord client being ready, and
+  // shouldn't go down just because Discord's API is slow. Confirmed live 2026-08-15: a stuck
+  // Discord REST call (see discordBot.ts's registerCommands) used to block this app.listen() call
+  // entirely, since it ran after `await startBot(...)` — the whole process looked hung with no
+  // error, nothing reachable, not even /health.
+  app.listen(PORT, () => {
+    console.log(`Delta City Dispatch (Phase 1) listening on port ${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
+    console.log(`Webhook endpoint: http://localhost:${PORT}/webhook/erlc`);
+  });
+
   await startBot(DISCORD_BOT_TOKEN!, DISCORD_APPLICATION_ID!);
   startCallsignDutyTracking();
   startComplianceMonitor();
@@ -93,12 +106,6 @@ async function main() {
   startCadReminder();
   startSessionPollers();
   warmUpTtsServer();
-
-  app.listen(PORT, () => {
-    console.log(`Delta City Dispatch (Phase 1) listening on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
-    console.log(`Webhook endpoint: http://localhost:${PORT}/webhook/erlc`);
-  });
 }
 
 main().catch((err) => {

@@ -133,6 +133,12 @@ process.on("uncaughtException", (err) => {
   console.error("[process] uncaught exception (kept running)", err);
 });
 
+// 20s hard timeout — confirmed live 2026-08-15: this PUT (a bulk guild-command overwrite, which
+// has tighter Discord rate limits than most REST calls) got stuck with no error and no timeout of
+// its own after this process had been restarted many times in one session, and because startBot()
+// used to await this BEFORE logging in, it silently stalled the bot's entire startup — including
+// index.ts's app.listen(), which used to wait on startBot() finishing first. Nothing after "POST
+// /internal/notify-unit registered" ever printed. See the restructuring below and in index.ts.
 export async function registerCommands(token: string, applicationId: string) {
   const rest = new REST({ version: "10" }).setToken(token);
   await rest.put(Routes.applicationGuildCommands(applicationId, GUILD_ID), {
@@ -147,6 +153,7 @@ export async function registerCommands(token: string, applicationId: string) {
       sessionDownCommand.toJSON(),
       checkCommand.toJSON(),
     ],
+    signal: AbortSignal.timeout(20_000),
   });
   console.log(
     "[discord] registered guild slash commands: /link, /callsign, /mylink, /bolo, /dispatch, " +
@@ -154,10 +161,19 @@ export async function registerCommands(token: string, applicationId: string) {
   );
 }
 
+// Logs in FIRST, then registers commands — the other way around (as this was until 2026-08-15) is
+// what caused the stall described above. Command registration now runs in the background and
+// can't block the bot coming online: a stuck or rate-limited registerCommands() call just means
+// stale slash commands until it eventually succeeds/times out, not a dead process. Existing
+// commands stay registered from the last successful sync either way — this only fails to update
+// them, it doesn't remove them.
 export async function startBot(token: string, applicationId: string) {
-  await registerCommands(token, applicationId);
   await client.login(token);
   console.log(`[discord] logged in as ${client.user?.tag}`);
+
+  registerCommands(token, applicationId).catch((err) => {
+    console.error("[discord] slash command registration failed — bot is online, but commands may be stale", err);
+  });
 }
 
 export async function getGuild() {
