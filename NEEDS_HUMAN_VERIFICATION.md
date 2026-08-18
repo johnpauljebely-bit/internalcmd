@@ -76,8 +76,14 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
     ephemeral ack.
 - **Bot moved off the dev machine entirely (2026-08-14) — now hosted on Orihost (Pterodactyl,
   free tier).** Real infrastructure change: no longer `npx tsx` + a Cloudflare tunnel on the dev
-  Mac — that tunnel is stopped, that whole approach is dead. Live at `176.100.37.91:30172`,
-  confirmed externally reachable via a direct `/health` check. **The Oracle VM plan in
+  Mac — that tunnel is stopped, that whole approach is dead. **Live at `46.247.108.191:30124` as
+  of 2026-08-17** (moved again — the previous node, `176.100.37.91:30172`, developed a real
+  problem: `client.login()` to Discord's gateway hung indefinitely with zero response, confirmed
+  via added shard-error/disconnect listeners and a stall-diagnostic log that fired with nothing
+  following it — looked like outbound network to `discord.com`/`gateway.discord.gg` was
+  blocked/dead on that specific node. User switched Orihost nodes and it started working again,
+  which points at a node-specific network issue rather than anything in this codebase). **The
+  Oracle VM plan in
   `deploy/README.md` is now a secondary/future option, not the active path** — Orihost is free,
   no card required, and already working. Real problems hit and fixed along the way, useful context
   if this ever needs debugging again:
@@ -97,14 +103,13 @@ Things that genuinely can't be self-tested or self-provisioned. Updated as they 
     aren't set. Could switch to git-based auto-deploy (this repo already has a real GitHub remote)
     by setting `GIT_ADDRESS`/`BRANCH`/`USERNAME`/`ACCESS_TOKEN`/`AUTO_UPDATE=1` in Orihost's
     Startup variables — not done yet, current process is manual SFTP re-sync.
-- **ER:LC's IP allowlist needs updating for the NEW outbound IP.** The old allowlisted IP
-  (`173.180.215.120`) was the dev machine's — now that outbound ER:LC API calls come from Orihost
-  instead, that allowlist entry is stale. Pterodactyl containers typically share their node's
-  public IP for outbound traffic, so `176.100.37.91` (the same IP used for the port allocation) is
-  the reasonable guess, but **not confirmed** — visit https://api.erlc.gg/server-owners and check/
-  update. Until this is done, every `:h`/PA/force-respawn call will keep failing with the same 403
-  this was already failing with before, just from a different IP now.
-- **No HTTPS/domain — plain `http://176.100.37.91:30172`.** Orihost's free tier doesn't provide a
+- **ER:LC's IP allowlist needs updating for the NEW outbound IP — again.** The old allowlisted IP
+  (`173.180.215.120`) was the dev machine's; `176.100.37.91` (the first Orihost node) was never
+  confirmed added either. Now that the bot moved to a second Orihost node (2026-08-17), the
+  outbound IP has changed again — reasonable guess is `46.247.108.191` (same IP as the new port
+  allocation), but **not confirmed**. Visit https://api.erlc.gg/server-owners and check/update.
+  Until this is done, every `:h`/PA/force-respawn call will keep failing with the same 403.
+- **No HTTPS/domain — plain `http://46.247.108.191:30124`.** Orihost's free tier doesn't provide a
   domain. Works for the CAD's server-to-server fetch calls (HTTP is fine there), but ER:LC's
   webhook dashboard might reject a non-HTTPS URL outright — untested as of this writing. If it
   does, the fix is running a Cloudflare Tunnel pointed at this IP:port instead of `localhost` (same

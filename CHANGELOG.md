@@ -2,6 +2,23 @@
 
 Running log of what got built, decisions made on ambiguous points, and what broke + how it got fixed. Newest first.
 
+## 2026-08-17 (infra) — Discord gateway was hanging on the Orihost node — resolved by switching nodes, new address
+
+Confirmed (via the shard-error/disconnect listeners and 30s stall-diagnostic added 2026-08-15)
+that `client.login()` was hanging with zero response from Discord's gateway/REST API — not an
+error, not a retry, nothing. Looked like outbound network to `discord.com`/`gateway.discord.gg`
+was blocked or dead specifically on that Orihost node. User switched to a different Orihost node
+and it started working immediately, confirming it was a node-specific network problem, not
+anything in this codebase.
+
+**New live address: `http://46.247.108.191:30124`** (was `176.100.37.91:30172`). Updated
+`NEEDS_HUMAN_VERIFICATION.md`; told the CAD session to update `BOT_INTERNAL_API_URL`. ER:LC's IP
+allowlist needs updating again too — the outbound IP changed with the node.
+
+No code changes this entry — the diagnostic logging added 2026-08-15 (client 'error'/'shardError'/
+'shardDisconnect'/'shardReconnecting' listeners, login-stall timer) stays in place since it's what
+actually proved this wasn't a bug, and will catch it again fast if it recurs.
+
 ## 2026-08-15 (!marketplace) — Purchasable-items panel, Roblox gamepass claim flow, /check for staff
 
 `!marketplace` (admin-tier, reused `MARKETPLACE_ADMIN_ROLE_IDS` = `DISPATCH_ADMIN_ROLE_IDS`, same
